@@ -426,7 +426,7 @@ async function fill() {
   const forget = () => { history.replaceState(null, '', location.pathname + location.search); window.name = ''; };
   if (ui.cancelled) { forget(); return; }
   if (siteDown) {
-    ui.status("Star Market's search isn't responding right now, so nothing was changed. Try again in a few minutes (reload this page first).");
+    ui.status("Star Market's search isn't responding right now, so nothing was changed. This usually clears within the hour (Star Market briefly slows down very busy sessions). Reload this page and try again later, or add items by hand.");
     return;
   }
   if (!ui.cancelled && !signedOut) {

@@ -81,6 +81,17 @@ The app can't search Star Market itself (browsers block cross-site calls). The w
 - **Owner decided:** items already in the Star Market cart are **topped up to the list amount** (list says 2, cart has 1 → add 1), never doubled. If the cart can't be read, say so in the summary and ask before adding. Items ticked off on the Shopping List are **skipped** (ticked = already handled).
 - Expect this to break sometimes when Star Market changes their site. The phase 1 list (with product links) must always work on its own.
 
+## Phase 2 as built (2026-11-10)
+
+- **Primary use is desktop Chrome** (owner's choice): plan in the app on the computer, click Build my cart → Open Star Market → the "Fill cart" bookmarks-bar button, then check out on the phone (same account cart). iPhone Safari is supported but not verified on a device; Chrome on iPhone is unreliable for bookmarklets.
+- **Handing over the list:** opens `starmarket.com/erums/cart#wgcart=<list>` (the search page rewrites its address; the cart page keeps it) and also names the new tab with the list, which survives redirects; clipboard paste is the last resort.
+- **Filling:** Star Market's own Add/+ buttons in hidden same-origin frames. Pages load 4 at a time; **cart changes go one at a time**, each waiting for Star Market's server reply (parallel changes were silently dropped in a live test). A final pass reloads the real cart, retries any shortfall once, and reports what's really there.
+- **Never doubles:** tops up to the list amount, using Star Market's cart copy (localStorage `abCart`) once the cart page has fetched it, and the page's own quantity otherwise.
+- **Out of stock / missing:** auto-substitute only when the product's title and usual price are known: must contain the ingredient's key words and half the title's words, similar size (½–2×), ≤1.5× the usual price per ounce/count (or per package when sizes don't compare), cheapest per ounce wins, store brands nudged. Substitutes show in yellow.
+- **Quantities:** loose produce is sold by the piece online; regulars carry their own count (bananas 6). Things thought of in pounds are linked to a bag size (green beans: 2 lb bag, 1 lb per meal).
+- **Star Market throttling:** search stops answering for ~10–20 minutes after bursts of ~40+ searches. The filler notices and stops without changing anything.
+- The owner never wants the app (or Claude) to check out.
+
 ## Left to the builder
 
 - Unit handling and conversions (keep it simple: same unit sums; packages = ceil(amount / package size)); what to show when units don't match.

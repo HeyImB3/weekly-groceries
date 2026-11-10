@@ -56,14 +56,18 @@ function panel() {
   };
 }
 
-async function getItems() {
+async function getItems(ui) {
   const m = location.hash.match(new RegExp(`${CART_HASH_KEY}=([A-Za-z0-9_-]+)`));
   if (m) {
     const items = decodeCart(m[1]);
     if (items) return items;
   }
+  ui.status('Reading your list from the clipboard… (tap Paste if asked)');
   try {
-    const clip = await navigator.clipboard.readText();
+    const clip = await Promise.race([
+      navigator.clipboard.readText(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000)),
+    ]);
     const items = decodeCart((clip.match(new RegExp(`${CART_HASH_KEY}=([A-Za-z0-9_-]+)`)) || [])[1] || clip);
     if (items) return items;
   } catch { /* clipboard not allowed; ask instead */ }
@@ -133,7 +137,7 @@ export async function run() {
   }
   if (document.getElementById(PANEL_ID)) return; // already running
   const ui = panel();
-  const items = await getItems();
+  const items = await getItems(ui);
   if (!items) { ui.status("Couldn't find a cart list. In the app, tap “Build my Star Market cart” first."); return; }
 
   const frame = document.createElement('iframe');

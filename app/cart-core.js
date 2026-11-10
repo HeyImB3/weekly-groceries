@@ -54,5 +54,6 @@ export function inCartQty(label) {
 }
 
 export function cartLink(items) {
-  return `https://www.starmarket.com/shop/search-results.html?q=weekly%20groceries#${CART_HASH_KEY}=${encodeCart(items)}`;
+  // The cart page keeps the # part (the search page rewrites its address).
+  return `https://www.starmarket.com/erums/cart#${CART_HASH_KEY}=${encodeCart(items)}`;
 }

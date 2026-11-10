@@ -3,7 +3,7 @@ import { h, fmt, openSheet, select } from './dom.js';
 import { buildShoppingList } from '../list.js';
 import { SECTIONS, newId } from '../model.js';
 import { productBlock } from './meals.js';
-import { cartItemsFromList, cartLink } from '../../cart-core.js';
+import { cartItemsFromList, cartLink, cartWindowName } from '../../cart-core.js';
 
 const APP_BASE = new URL('../../', import.meta.url).href; // .../weekly-groceries/
 export const BOOKMARKLET = `javascript:(function(){var s=document.createElement('script');s.type='module';s.src='${APP_BASE}cart.js?v='+Date.now();document.body.appendChild(s);})()`;
@@ -61,8 +61,11 @@ function buildCart(list) {
         h('li', {}, 'Tap “Open Star Market” (signed in, in Safari).'),
         h('li', {}, 'Tap your “Fill cart” bookmark and wait for the green checks.'),
         h('li', {}, 'Review the cart and check out for pickup.')),
-      h('a', { class: 'btn', href: link, target: '_blank', rel: 'noopener', onclick: () => {
+      h('a', { class: 'btn', href: link, target: '_blank', rel: 'noopener', onclick: e => {
         navigator.clipboard?.writeText(link).catch(() => {});
+        // Name the new tab with the list too: Star Market may redirect and drop the # part.
+        const w = window.open(link, cartWindowName(items));
+        if (w) e.preventDefault();
         msg.textContent = 'If Star Market opened inside this app, tap the Safari/compass icon to open it in Safari so your bookmark is there. (The list is also copied, so the bookmark can paste it.)';
       } }, 'Open Star Market'),
       msg,

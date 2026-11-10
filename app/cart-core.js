@@ -53,6 +53,20 @@ export function inCartQty(label) {
   return m ? Number(m[1]) : 0;
 }
 
+// Find a cart code in a link ("#wgcart=..."), a tab name ("wgcart_..."), or a
+// bare pasted code. Returns the code only if it decodes to a real list.
+export function findCartCode(text) {
+  if (typeof text !== 'string' || !text) return null;
+  const m = text.match(new RegExp(`${CART_HASH_KEY}[=_]([A-Za-z0-9_-]+)`));
+  const code = m ? m[1] : text.trim();
+  return decodeCart(code) ? code : null;
+}
+
+// Name for the Star Market tab; survives redirects, unlike the # part.
+export function cartWindowName(items) {
+  return `${CART_HASH_KEY}_${encodeCart(items)}`;
+}
+
 export function cartLink(items) {
   // The cart page keeps the # part (the search page rewrites its address).
   return `https://www.starmarket.com/erums/cart#${CART_HASH_KEY}=${encodeCart(items)}`;

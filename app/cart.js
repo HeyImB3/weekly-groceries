@@ -3,7 +3,7 @@
 // Add / + buttons inside a hidden frame, one product at a time, and tops each
 // item up to the amount on your list (it never removes anything).
 // Load the shared helpers fresh each time so updates apply right away.
-const { CART_HASH_KEY, decodeCart, inCartQty } = await import(`./cart-core.js?v=${Date.now()}`);
+const { decodeCart, inCartQty, findCartCode } = await import(`./cart-core.js?v=${Date.now()}`);
 
 const PANEL_ID = 'wg-cart-panel';
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -57,10 +57,10 @@ function panel() {
 }
 
 async function getItems(ui) {
-  const m = location.hash.match(new RegExp(`${CART_HASH_KEY}=([A-Za-z0-9_-]+)`));
-  if (m) {
-    const items = decodeCart(m[1]);
-    if (items) return items;
+  // 1) the link's # part, 2) the tab name the app gave this tab (survives redirects)
+  for (const source of [location.hash, window.name]) {
+    const code = findCartCode(source);
+    if (code) return decodeCart(code);
   }
   ui.status('Reading your list from the clipboard… (tap Paste if asked)');
   try {
@@ -68,12 +68,12 @@ async function getItems(ui) {
       navigator.clipboard.readText(),
       new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000)),
     ]);
-    const items = decodeCart((clip.match(new RegExp(`${CART_HASH_KEY}=([A-Za-z0-9_-]+)`)) || [])[1] || clip);
-    if (items) return items;
+    const code = findCartCode(clip);
+    if (code) return decodeCart(code);
   } catch { /* clipboard not allowed; ask instead */ }
-  const pasted = prompt('Paste the cart code from the Weekly Groceries app:');
-  if (!pasted) return null;
-  return decodeCart((pasted.match(new RegExp(`${CART_HASH_KEY}=([A-Za-z0-9_-]+)`)) || [])[1] || pasted);
+  const pasted = prompt('Paste the cart code from the Weekly Groceries app (Ctrl+V / long-press → Paste):');
+  const code = findCartCode(pasted);
+  return code ? decodeCart(code) : null;
 }
 
 // Load Star Market's search page for one product in the hidden frame.
@@ -180,6 +180,7 @@ export async function run() {
   if (!ui.cancelled) {
     ui.status(`Done: ${results.added.length} added, ${results.already.length} already there, ${results.problems.length} need a look.`);
     history.replaceState(null, '', location.pathname + location.search);
+    window.name = '';
     const a = document.createElement('a');
     a.href = '/erums/cart';
     a.textContent = 'Open my cart →';

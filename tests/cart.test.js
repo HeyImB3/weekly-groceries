@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cartItemsFromList, encodeCart, decodeCart, inCartQty, CART_HASH_KEY, cartLink } from '../app/cart-core.js';
+import { cartItemsFromList, encodeCart, decodeCart, inCartQty, CART_HASH_KEY, cartLink, findCartCode } from '../app/cart-core.js';
 
 const row = (o) => ({ key: 'k', name: 'X', section: 'Other', amount: null, unit: null, packs: 1, unitMismatch: false,
   link: '', linked: true, done: false, source: 'meal', productId: '1', ...o });
@@ -50,6 +50,17 @@ test('inCartQty reads the site label', () => {
   assert.equal(inCartQty('Add 1 unit of Banana'), 0);
   assert.equal(inCartQty(''), 0);
   assert.equal(inCartQty(null), 0);
+});
+
+test('findCartCode pulls the code out of a link, a tab name, or a bare code', () => {
+  const items = [{ id: '1', qty: 2, name: 'a' }];
+  const code = encodeCart(items);
+  assert.equal(findCartCode(cartLink(items)), code);
+  assert.equal(findCartCode(`${CART_HASH_KEY}_${code}`), code);
+  assert.equal(findCartCode(code), code);
+  assert.equal(findCartCode(''), null);
+  assert.equal(findCartCode(null), null);
+  assert.equal(findCartCode('some random window name'), null);
 });
 
 test('cartLink puts the list after # on a Star Market page', () => {

@@ -26,7 +26,7 @@ const INGREDIENTS = [
   ['Silken tofu', 'oz', 'Produce', false, p('960098954', 16, 'oz')],        // O Organics Tofu Silken 16 oz
   ['Rice vermicelli noodles', 'pack', 'Pantry', false, p('960436455', 1, 'pack')], // A Taste of Thai Vermicelli 8.8 oz
   ['Extra firm tofu', 'ea', 'Produce', false, p('960027626', 1, 'ea')],    // O Organics Tofu Extra Firm 14 oz
-  ['Green beans', 'ea', 'Produce', false, p('184270078', 1, 'ea')],        // sold by weight; 1 = about 1 lb
+  ['Green beans', 'oz', 'Produce', false, p('960479694', 12, 'oz')],       // Signature Farms Green Beans 12 oz bag (loose beans aren't findable online)
   ['Vegetable bouillon', 'tbsp', 'Pantry', true, p('960014610', 1, 'tbsp')], // Better Than Bouillon Seasoned Vegetable 8 oz
   ['Coconut cream', 'ea', 'Pantry', false, p('960202723', 1, 'ea')],       // Thai Kitchen Unsweetened Coconut Cream
   ['Sesame oil', 'tbsp', 'Pantry', true, null],
@@ -35,11 +35,11 @@ const INGREDIENTS = [
 
 // [meal name, [[ingredient name, amount per 2 servings], ...]]
 const MEALS = [
-  ['Ramen with hard boiled eggs', [['Ramen noodles', 2], ['Eggs', 4], ['Extra firm tofu', 2], ['Green beans', 0.5], ['Vegetable bouillon', 2], ['Green onions', 0.5], ['Soy sauce', 2]]],
+  ['Ramen with hard boiled eggs', [['Ramen noodles', 2], ['Eggs', 4], ['Extra firm tofu', 2], ['Green beans', 6], ['Vegetable bouillon', 2], ['Green onions', 0.5], ['Soy sauce', 2]]],
   ['Grilled cheese and butternut squash soup', [['Bread', 4], ['Shredded cheddar', 4], ['Butter', 2], ['Butternut squash', 1], ['Coconut cream', 1], ['Vegetable bouillon', 1], ['Olive oil', 1]]],
   ['Omelettes and home fries', [['Eggs', 6], ['Shredded cheddar', 4], ['Fajita vegetables (peppers & onions)', 7], ['Potatoes', 1.5], ['Butter', 1], ['Olive oil', 2]]],
   ['Pesto pasta with silken tofu', [['Spaghetti', 16], ['Pesto', 8.3], ['Silken tofu', 16]]],
-  ['Stir fry veggies, eggs and noodles', [['Rice vermicelli noodles', 2], ['Eggs', 3], ['Extra firm tofu', 2], ['Green beans', 0.5], ['Fajita vegetables (peppers & onions)', 14], ['Soy sauce', 3], ['Sesame oil', 1], ['Garlic', 2]]],
+  ['Stir fry veggies, eggs and noodles', [['Rice vermicelli noodles', 2], ['Eggs', 3], ['Extra firm tofu', 2], ['Green beans', 6], ['Fajita vegetables (peppers & onions)', 14], ['Soy sauce', 3], ['Sesame oil', 1], ['Garlic', 2]]],
 ];
 
 // Extras from the Nov 9 order that aren't tied to a meal. [name, section, product]

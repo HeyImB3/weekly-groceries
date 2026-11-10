@@ -140,6 +140,17 @@ async function topUp(frame, item) {
   return { state: cur >= item.qty ? 'added' : 'partial', had, now: cur };
 }
 
+// One-click search for an item that couldn't be added, to pick a substitute.
+function findLink(item) {
+  const a = document.createElement('a');
+  a.href = `/shop/search-results.html?q=${encodeURIComponent(item.name)}`;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = 'Find it ↗';
+  a.style.cssText = 'color:#4da3ff;margin-left:6px;text-decoration:underline';
+  return a;
+}
+
 export async function run() {
   if (!/(^|\.)starmarket\.com$/.test(location.hostname)) {
     alert('Open www.starmarket.com (signed in), then tap the Fill cart bookmark again.');
@@ -185,8 +196,8 @@ export async function run() {
       if (r.state === 'added') { line.textContent = `✓ ${it.name}: ${r.had ? `had ${r.had}, now ` : ''}${r.now}`; line.style.color = '#30d158'; results.added.push(it); }
       else if (r.state === 'already') { line.textContent = `✓ ${it.name}: already ${r.had} in cart`; line.style.color = '#30d158'; results.already.push(it); }
       else if (r.state === 'partial') { line.textContent = `⚠ ${it.name}: only got to ${r.now} of ${it.qty}`; line.style.color = '#ffb340'; results.problems.push(it); }
-      else if (r.state === 'notfound') { line.textContent = `✕ ${it.name}: not found (maybe out of stock)`; line.style.color = '#ff453a'; results.problems.push(it); }
-      else { line.textContent = `✕ ${it.name}: couldn't add`; line.style.color = '#ff453a'; results.problems.push(it); }
+      else if (r.state === 'notfound') { line.textContent = `✕ ${it.name}: not found (maybe out of stock) `; line.style.color = '#ff453a'; line.append(findLink(it)); results.problems.push(it); }
+      else { line.textContent = `✕ ${it.name}: couldn't add `; line.style.color = '#ff453a'; line.append(findLink(it)); results.problems.push(it); }
       finished++;
       show();
     }

@@ -78,14 +78,24 @@ async function openProduct(frame, id) {
     const d = frame.contentDocument;
     if (!d || d.readyState === 'loading') return null;
     const add = d.getElementById(`addButton_${id}`);
-    const qty = d.getElementById(`qtyInfo_${id}`);
+    const qty = d.getElementById(`qtyInfo_${id}`) || d.getElementById(`bubble_qtyInfo_${id}`);
     if (add || qty) return { d, add, qty };
     return null;
   }, 20000);
 }
 
+// Items already in the cart show a collapsed "bubble"; the stepper shows qtyInfo.
 function currentQty(d, id) {
-  return inCartQty(d.getElementById(`qtyInfo_${id}`)?.getAttribute('aria-label'));
+  const el = d.getElementById(`qtyInfo_${id}`) || d.getElementById(`bubble_qtyInfo_${id}`);
+  return inCartQty(el?.getAttribute('aria-label'));
+}
+
+async function incButton(d, id) {
+  let inc = d.getElementById(`inc_qtyInfo_${id}`);
+  if (inc) return inc;
+  d.getElementById(`bubble_qtyInfo_${id}`)?.click();
+  inc = await waitFor(() => d.getElementById(`inc_qtyInfo_${id}`), 5000);
+  return inc;
 }
 
 async function topUp(frame, item) {
@@ -103,7 +113,7 @@ async function topUp(frame, item) {
     cur = currentQty(d, item.id);
   }
   while (cur < item.qty) {
-    const inc = d.getElementById(`inc_qtyInfo_${item.id}`);
+    const inc = await incButton(d, item.id);
     if (!inc || inc.disabled) break;
     const before = cur;
     inc.click();

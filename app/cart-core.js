@@ -47,8 +47,9 @@ export function decodeCart(text) {
 }
 
 // "2 units of Banana in cart. Click to update" -> 2
+// (also "collapsed, 1 unit of … in cart" from the bubble shown on page load)
 export function inCartQty(label) {
-  const m = typeof label === 'string' && label.match(/^\s*(\d+)\s+units?\b/i);
+  const m = typeof label === 'string' && label.match(/(?:^|,\s*)(\d+)\s+units?\s+of\b.*\bin cart\b/i);
   return m ? Number(m[1]) : 0;
 }
 

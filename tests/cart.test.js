@@ -45,6 +45,9 @@ test('decodeCart drops bad entries and caps qty', () => {
 test('inCartQty reads the site label', () => {
   assert.equal(inCartQty('1 unit of O Organics Tofu Silken - 16 Oz in cart. Click to update'), 1);
   assert.equal(inCartQty('12 units of Banana in cart. Click to update'), 12);
+  assert.equal(inCartQty('collapsed, 1 unit of O Organics Tofu Silken - 16 Oz in cart. Click to update'), 1);
+  assert.equal(inCartQty('expanded, 3 units of Banana in cart. Click to update'), 3);
+  assert.equal(inCartQty('Add 1 unit of Banana'), 0);
   assert.equal(inCartQty(''), 0);
   assert.equal(inCartQty(null), 0);
 });

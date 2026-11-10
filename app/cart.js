@@ -150,35 +150,53 @@ export async function run() {
   const items = await getItems(ui);
   if (!items) { ui.status("Couldn't find a cart list. In the app, tap “Build my Star Market cart” first."); return; }
 
-  const frame = document.createElement('iframe');
-  frame.setAttribute('aria-hidden', 'true');
-  // Keep the frame on-screen (but invisible, behind the panel): iPhone browsers
-  // may not load or update frames that are off-screen.
-  frame.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;border:0;opacity:0.01;pointer-events:none;z-index:2147483646';
-  document.body.append(frame);
+  // Work on a few items at once, each in its own hidden frame. Kept small so
+  // we stay a gentle visitor on Star Market's site.
+  const WORKERS = Math.min(3, items.length);
+  const frames = Array.from({ length: WORKERS }, () => {
+    const f = document.createElement('iframe');
+    f.setAttribute('aria-hidden', 'true');
+    // Keep frames on-screen (but invisible, behind the panel): iPhone browsers
+    // may not load or update frames that are off-screen.
+    f.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;border:0;opacity:0;pointer-events:none;z-index:2147483646';
+    document.body.append(f);
+    return f;
+  });
 
+  const lines = items.map(it => ui.line(`… ${it.name} ×${it.qty}`, '#8e8e93'));
   const results = { added: [], already: [], problems: [] };
-  for (let i = 0; i < items.length; i++) {
-    if (ui.cancelled) break;
-    const it = items[i];
-    ui.status(`Adding ${i + 1} of ${items.length}…`);
-    const line = ui.line(`… ${it.name} ×${it.qty}`, '#8e8e93');
-    let r;
-    try { r = await topUp(frame, it); } catch { r = { state: 'failed' }; }
-    if (r.state === 'signedout') {
-      line.textContent = '⚠ You are signed out. Sign in to Star Market, then tap the bookmark again.';
-      line.style.color = '#ffb340';
-      break;
+  let next = 0, finished = 0, signedOut = false;
+  const show = () => ui.status(`Adding… ${finished} of ${items.length} done`);
+  show();
+
+  async function worker(frame) {
+    while (!ui.cancelled && !signedOut && next < items.length) {
+      const i = next++;
+      const it = items[i], line = lines[i];
+      line.textContent = `⏳ ${it.name} ×${it.qty}`;
+      let r;
+      try { r = await topUp(frame, it); } catch { r = { state: 'failed' }; }
+      if (r.state === 'signedout') {
+        signedOut = true;
+        line.textContent = '⚠ You are signed out. Sign in to Star Market, then tap the bookmark again.';
+        line.style.color = '#ffb340';
+        return;
+      }
+      if (r.state === 'added') { line.textContent = `✓ ${it.name}: ${r.had ? `had ${r.had}, now ` : ''}${r.now}`; line.style.color = '#30d158'; results.added.push(it); }
+      else if (r.state === 'already') { line.textContent = `✓ ${it.name}: already ${r.had} in cart`; line.style.color = '#30d158'; results.already.push(it); }
+      else if (r.state === 'partial') { line.textContent = `⚠ ${it.name}: only got to ${r.now} of ${it.qty}`; line.style.color = '#ffb340'; results.problems.push(it); }
+      else if (r.state === 'notfound') { line.textContent = `✕ ${it.name}: not found (maybe out of stock)`; line.style.color = '#ff453a'; results.problems.push(it); }
+      else { line.textContent = `✕ ${it.name}: couldn't add`; line.style.color = '#ff453a'; results.problems.push(it); }
+      finished++;
+      show();
     }
-    if (r.state === 'added') { line.textContent = `✓ ${it.name}: ${r.had ? `had ${r.had}, now ` : ''}${r.now}`; line.style.color = '#30d158'; results.added.push(it); }
-    else if (r.state === 'already') { line.textContent = `✓ ${it.name}: already ${r.had} in cart`; line.style.color = '#30d158'; results.already.push(it); }
-    else if (r.state === 'partial') { line.textContent = `⚠ ${it.name}: only got to ${r.now} of ${it.qty}`; line.style.color = '#ffb340'; results.problems.push(it); }
-    else if (r.state === 'notfound') { line.textContent = `✕ ${it.name}: not found (maybe out of stock)`; line.style.color = '#ff453a'; results.problems.push(it); }
-    else { line.textContent = `✕ ${it.name}: couldn't add`; line.style.color = '#ff453a'; results.problems.push(it); }
   }
-  frame.remove();
-  if (!ui.cancelled) {
-    ui.status(`Done: ${results.added.length} added, ${results.already.length} already there, ${results.problems.length} need a look.`);
+
+  const t0 = Date.now();
+  await Promise.all(frames.map(worker));
+  frames.forEach(f => f.remove());
+  if (!ui.cancelled && !signedOut) {
+    ui.status(`Done in ${Math.round((Date.now() - t0) / 1000)}s: ${results.added.length} added, ${results.already.length} already there, ${results.problems.length} need a look.`);
     history.replaceState(null, '', location.pathname + location.search);
     window.name = '';
     const a = document.createElement('a');

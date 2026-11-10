@@ -142,12 +142,12 @@ function renderList(root, ctx) {
     h('div', { class: 'sub', style: 'margin:-4px 0 8px' }, 'Extras like coffee or paper towels. Tick them on the list when you need them.'));
   for (const r of [...s.regulars].sort(byName)) {
     root.append(h('button', { class: 'row', onclick: () => editRegular(ctx, r.id) },
-      h('span', { class: 'grow' }, r.name, h('div', { class: 'sub' }, `${r.section}${r.product ? ' · linked' : ''}`)),
+      h('span', { class: 'grow' }, r.name, h('div', { class: 'sub' }, `×${r.qty || 1} · ${r.section}${r.product ? ' · linked' : ''}`)),
       h('span', { class: 'chev' }, '›')));
   }
   root.append(h('button', { class: 'btn secondary', onclick: () => askName('New regular', '', name => {
     const id = newId();
-    ctx.update(st => { st.regulars.push({ id, name, section: 'Other', product: null }); });
+    ctx.update(st => { st.regulars.push({ id, name, section: 'Other', qty: 1, product: null }); });
     editRegular(ctx, id);
   }) }, '+ Add regular'));
 
@@ -189,7 +189,12 @@ function editRegular(ctx, id) {
     const set = patch => { ctx.update(st => { Object.assign(st.regulars.find(x => x.id === id), patch); }); close(); editRegular(ctx, id); };
     return [
       h('label', { class: 'field' }, h('span', {}, 'Name'), h('input', { value: r.name, onchange: e => e.target.value.trim() && quiet({ name: e.target.value.trim() }) })),
-      h('label', { class: 'field' }, h('span', {}, 'Store section'), select(SECTIONS, r.section, v => quiet({ section: v }))),
+      h('div', { class: 'inline' },
+        h('label', { class: 'field', style: 'flex:1' }, h('span', {}, 'How many (packages or pieces)'),
+          h('input', { type: 'number', inputMode: 'numeric', min: '1', step: '1', value: r.qty || 1,
+            onchange: e => { const n = Math.round(parseNum(e.target.value)); if (n >= 1) quiet({ qty: n }); else e.target.value = r.qty || 1; } })),
+        h('label', { class: 'field', style: 'flex:1' }, h('span', {}, 'Store section'), select(SECTIONS, r.section, v => quiet({ section: v })))),
+      h('div', { class: 'sub' }, 'Loose produce is sold by the piece online (e.g. 6 bananas). For things you think of in pounds, link a bag size instead.'),
       productBlock(r.product, r.name, r.product?.packUnit || 'pack', (p, q) => (q ? quiet({ product: p }) : set({ product: p }))),
       h('button', { class: 'btn danger', onclick: () => {
         if (!confirm(`Delete “${r.name}”?`)) return;

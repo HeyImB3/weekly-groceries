@@ -69,6 +69,18 @@ test('damaged entries in a backup are dropped, not crash-causing', () => {
   assert.deepEqual(r.state.oneOffs, []);
 });
 
+test('product title/price and regular qty survive normalize', () => {
+  const s = createInitialState();
+  const ingId = Object.keys(s.ingredients)[0];
+  s.ingredients[ingId].product = { id: '5', url: 'https://www.starmarket.com/shop/product-details.5.html', packSize: 1, packUnit: 'ea', title: 'Thing - 8 Oz', price: 2.5 };
+  s.regulars = [{ id: 'r', name: 'Bananas', section: 'Produce', qty: 6, product: null }, { id: 'q', name: 'X', section: 'Other', product: null }];
+  const r = importBackup(exportBackup(s));
+  assert.equal(r.state.ingredients[ingId].product.title, 'Thing - 8 Oz');
+  assert.equal(r.state.ingredients[ingId].product.price, 2.5);
+  assert.equal(r.state.regulars[0].qty, 6);
+  assert.equal(r.state.regulars[1].qty, 1);
+});
+
 test('valid product links survive normalize', () => {
   const s = createInitialState();
   const ingId = Object.keys(s.ingredients)[0];

@@ -119,6 +119,23 @@ test('regulars only when included; one-offs use qty', () => {
   assert.equal(l.empty, false);
 });
 
+test('regulars use their own quantity (e.g. 6 bananas)', () => {
+  const s = base();
+  s.regulars = [{ id: 'r1', name: 'Bananas', section: 'Produce', qty: 6, product: prod(1, 'ea', '184060007') }];
+  s.checks.regularsIncluded.r1 = true;
+  assert.equal(row(buildShoppingList(s), 'reg:r1').packs, 6);
+});
+
+test('rows carry product title and usual price for substitutes', () => {
+  const s = base();
+  s.ingredients.eggs.product = { ...prod(18, 'ea', '970055145'), title: 'Lucerne Eggs - 18 CT', price: 4.99 };
+  s.week.mon = { mealId: 'omelette', servings: 2 };
+  const r = row(buildShoppingList(s), 'ing:eggs');
+  assert.equal(r.productId, '970055145');
+  assert.equal(r.productTitle, 'Lucerne Eggs - 18 CT');
+  assert.equal(r.productPrice, 4.99);
+});
+
 test('done flag comes from checks', () => {
   const s = base();
   s.week.mon = { mealId: 'omelette', servings: 2 };

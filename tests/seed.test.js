@@ -58,6 +58,18 @@ test("owner's Nov 9 week reproduces the order's package counts", () => {
   assert.ok(l.staples.some(s => s.name === 'Vegetable bouillon'));
 });
 
+test('every starter product has its Star Market title and usual price; bananas default to 6', () => {
+  const s = createInitialState();
+  for (const p of [...Object.values(s.ingredients).map(i => i.product), ...s.regulars.map(r => r.product)].filter(Boolean)) {
+    assert.ok(p.title && p.title.length > 3, p.id);
+    assert.ok(p.price > 0, p.id);
+  }
+  assert.equal(s.regulars.find(r => r.name === 'Bananas').qty, 6);
+  const gb = Object.values(s.ingredients).find(i => i.name === 'Green beans');
+  assert.equal(gb.product.id, '970026757');
+  assert.equal(gb.unit, 'lb');
+});
+
 test('owner kept De Cecco spaghetti and Dave\'s bread', () => {
   const s = createInitialState();
   const by = n => Object.values(s.ingredients).find(i => i.name === n).product.id;

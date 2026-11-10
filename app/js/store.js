@@ -18,7 +18,10 @@ function cleanProduct(p) {
   if (!isObj(p)) return null;
   const parsed = parseProductLink(p.url);
   if (!parsed) return null;
-  return { ...parsed, packSize: isNum(p.packSize) && p.packSize > 0 ? p.packSize : 1, packUnit: isName(p.packUnit) ? p.packUnit : 'ea' };
+  const out = { ...parsed, packSize: isNum(p.packSize) && p.packSize > 0 ? p.packSize : 1, packUnit: isName(p.packUnit) ? p.packUnit : 'ea' };
+  if (isName(p.title)) out.title = p.title.slice(0, 140);
+  if (isNum(p.price) && p.price > 0) out.price = p.price;
+  return out;
 }
 
 // Drop damaged entries and fill in missing parts so the app can never be
@@ -54,7 +57,7 @@ function normalize(s) {
     .map(x => ({
       id: x.id, name: x.name,
       section: SECTIONS.includes(x.section) ? x.section : 'Other',
-      ...(withQty ? { qty: isNum(x.qty) && x.qty > 0 ? x.qty : 1 } : {}),
+      qty: isNum(x.qty) && x.qty > 0 ? x.qty : 1,
       product: cleanProduct(x.product),
     }));
   const checks = isObj(s.checks) ? s.checks : {};

@@ -16,6 +16,8 @@ function makeRow({ key, name, section, product, amount = null, unit = null, pack
     link: product ? product.url : searchUrl(name),
     linked: !!product,
     productId: product ? product.id : null,
+    productTitle: product && product.title ? product.title : null,
+    productPrice: product && product.price > 0 ? product.price : null,
     done: !!done,
     source,
   };
@@ -83,7 +85,7 @@ export function buildShoppingList(state) {
   for (const r of state.regulars ?? []) {
     if (!regularsIncluded[r.id]) continue;
     const key = `reg:${r.id}`;
-    toBuy.push(makeRow({ key, name: r.name, section: r.section, product: r.product, packs: 1, source: 'regular', done: done[key] }));
+    toBuy.push(makeRow({ key, name: r.name, section: r.section, product: r.product, packs: Math.max(1, Math.round(Number(r.qty) || 1)), source: 'regular', done: done[key] }));
   }
 
   for (const o of state.oneOffs ?? []) {

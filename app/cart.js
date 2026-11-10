@@ -82,10 +82,18 @@ async function getItems(ui) {
 // Star Market's own copy of the cart. Only trusted when the site refreshed it
 // after this page loaded (it can be stale if you changed the cart elsewhere).
 const PAGE_START = Math.round(performance.timeOrigin || Date.now());
+// The cart page fetches your cart from Star Market's servers when it loads;
+// once that has come back, the copy reflects the real cart.
+function cartFetchedThisPage() {
+  try {
+    return performance.getEntriesByType('resource')
+      .some(e => /cartservice\/api\/v2\/cart\/customer\//.test(e.name) && e.responseEnd > 0);
+  } catch { return false; }
+}
 function knownQty(id) {
   try {
     const raw = localStorage.getItem('abCart');
-    if (!snapshotIsFresh(raw, PAGE_START)) return null;
+    if (!cartFetchedThisPage() && !snapshotIsFresh(raw, PAGE_START)) return null;
     const snap = readCartSnapshot(raw);
     return snap.has(id) ? snap.get(id).qty : 0;
   } catch { return null; }

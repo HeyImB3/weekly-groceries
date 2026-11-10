@@ -81,6 +81,21 @@ test('product title/price and regular qty survive normalize', () => {
   assert.equal(r.state.regulars[1].qty, 1);
 });
 
+test('older saved data gets known product titles/prices and 6 bananas filled in', () => {
+  const s = createInitialState();
+  for (const i of Object.values(s.ingredients)) if (i.product) { delete i.product.title; delete i.product.price; }
+  const bananas = s.regulars.find(r => r.name === 'Bananas');
+  delete bananas.qty; delete bananas.product.title; delete bananas.product.price;
+  const gb = Object.values(s.ingredients).find(i => i.name === 'Green beans');
+  gb.product = { id: '960479694', url: 'https://www.starmarket.com/shop/product-details.960479694.html', packSize: 12, packUnit: 'oz' };
+  const r = importBackup(exportBackup(s)).state;
+  const eggs = Object.values(r.ingredients).find(i => i.name === 'Eggs');
+  assert.equal(eggs.product.title, 'Lucerne Eggs Cage Free Brown Large Grd A - 18 CT');
+  assert.ok(eggs.product.price > 0);
+  assert.equal(Object.values(r.ingredients).find(i => i.name === 'Green beans').product.title, 'Signature SELECT/FARMS Green Beans - 12 Oz');
+  assert.equal(r.regulars.find(x => x.name === 'Bananas').qty, 6);
+});
+
 test('valid product links survive normalize', () => {
   const s = createInitialState();
   const ingId = Object.keys(s.ingredients)[0];

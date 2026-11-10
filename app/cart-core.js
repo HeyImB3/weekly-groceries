@@ -42,20 +42,32 @@ export function readCartSnapshot(json) {
 }
 
 // ---------- sizes, unit prices, substitutes ----------
-const SIZE_RE = /(\d+(?:\.\d+)?)\s*(fl\.?\s*oz\.?|oz|lbs?|ct|count)\b/gi;
+const UNIT = String.raw`(fl\.?\s*oz\.?|fluid\s+ounces?|ounces?|oz|pounds?|lbs?|ct|count)`;
+const MULTI_RE = new RegExp(String.raw`(\d+)\s*-\s*(\d+(?:\.\d+)?)\s*${UNIT}(?![a-z])`, 'gi');
+const SIZE_RE = new RegExp(String.raw`(\d+(?:\.\d+)?)\s*${UNIT}(?![a-z])`, 'gi');
 
-// "… - 2 Lb" -> {value: 32, unit: 'oz'}; uses the last size in the title.
-export function parseSize(title) {
-  if (typeof title !== 'string') return null;
-  const all = [...title.matchAll(SIZE_RE)];
-  if (!all.length) return null;
-  const [, num, rawUnit] = all[all.length - 1];
-  const n = Number(num);
+function toSize(n, rawUnit) {
   const u = rawUnit.toLowerCase().replace(/[\s.]/g, '');
   if (u.startsWith('fl')) return { value: n, unit: 'floz' };
-  if (u.startsWith('lb')) return { value: n * 16, unit: 'oz' };
-  if (u === 'oz') return { value: n, unit: 'oz' };
+  if (u.startsWith('lb') || u.startsWith('pound')) return { value: n * 16, unit: 'oz' };
+  if (u === 'oz' || u.startsWith('ounce')) return { value: n, unit: 'oz' };
   return { value: n, unit: 'ct' };
+}
+
+// "… - 2 Lb" -> {value: 32, unit: 'oz'}; "24-16.9 Fl. Oz." -> 24 × 16.9 fl oz.
+// Uses the last size in the title.
+export function parseSize(title) {
+  if (typeof title !== 'string') return null;
+  const multi = [...title.matchAll(MULTI_RE)];
+  const single = [...title.matchAll(SIZE_RE)];
+  const lastMulti = multi[multi.length - 1];
+  const lastSingle = single[single.length - 1];
+  if (lastMulti && (!lastSingle || lastMulti.index + lastMulti[0].length >= lastSingle.index + lastSingle[0].length)) {
+    const s = toSize(Number(lastMulti[2]), lastMulti[3]);
+    return { value: Math.round(Number(lastMulti[1]) * s.value * 1000) / 1000, unit: s.unit };
+  }
+  if (!lastSingle) return null;
+  return toSize(Number(lastSingle[1]), lastSingle[2]);
 }
 
 const PER = { pound: 'lb', lb: 'lb', ounce: 'oz', oz: 'oz', 'fl oz': 'floz', each: 'ea', ea: 'ea', count: 'ct', ct: 'ct' };
@@ -74,64 +86,80 @@ export function isStoreBrand(title) {
 
 const STOP = new Set(['and', 'with', 'the', 'of', 'a', 'an', 'in', 'no', 'box', 'bag', 'count', 'pack', 'fl', 'oz', 'lb', 'lbs', 'ct',
   'signature', 'select', 'farms', 'lucerne', 'o', 'organics', 'open', 'nature', 'each', 'family', 'size']);
+function stem(w) {
+  if (w.length > 4 && w.endsWith('oes')) return w.slice(0, -2);   // tomatoes -> tomato
+  if (w.length > 4 && w.endsWith('ies')) return w.slice(0, -3) + 'y'; // berries -> berry
+  if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
+  return w;
+}
 function tokens(text) {
   return new Set(String(text || '').toLowerCase().split(/[^a-z]+/)
     .filter(w => w.length > 1 && !STOP.has(w))
-    .map(w => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w)));
+    .map(stem));
 }
 
 function stripSize(title) {
-  return String(title || '').replace(/\s+-\s+[\d.].*$/, '').trim();
+  return String(title || '').replace(/\s*-\s*[\d.].*$/, '').trim();
 }
 
 export function searchTermFor(item) {
   return item.title ? stripSize(item.title) : item.name;
 }
 
-// Price per ounce (or per count/each) so different sizes compare fairly.
+// Price per ounce (or per count) so different sizes compare fairly.
 function perBase(c, size) {
   const u = c.unitPrice;
   if (u && u.value > 0) {
     if (u.per === 'lb') return u.value / 16;
     if (u.per === 'oz' || u.per === 'floz') return u.value;
-    if (size && (u.per === 'ct') && size.unit === 'ct') return u.value;
+    if (u.per === 'ct' && size && size.unit === 'ct') return u.value;
   }
   if (size && size.value > 0 && c.price > 0) return c.price / size.value;
   return c.price > 0 ? c.price : Infinity;
 }
 
-// Pick a good stand-in for a product that couldn't be added.
-//  - must be the same kind of thing: every word of the ingredient name, and at
-//    least half the words of the original product title
+// Pick a good stand-in for a product that couldn't be added. Only when we know
+// the original product's title and usual price (otherwise we'd be guessing).
+//  - same kind of thing: at least half the words of the original title
 //  - similar size (half to double), when both sizes are known
-//  - not much pricier than usual (≤ 1.5× the usual price per ounce/unit)
+//  - not much pricier than usual: ≤ 1.5× per ounce/count when sizes compare,
+//    otherwise ≤ 1.5× the usual price for the package
 //  - cheapest per ounce wins; store brands get a 10% nudge
-export function pickSubstitute(orig, candidates) {
-  const nameTok = tokens(orig.name);
-  const titleTok = orig.title ? tokens(stripSize(orig.title)) : null;
+//  - never one of `exclude` (other list items, substitutes already picked)
+export function pickSubstitute(orig, candidates, exclude = new Set()) {
+  if (!orig || !orig.title || !(orig.price > 0)) return null;
+  const titleTok = tokens(stripSize(orig.title));
+  if (!titleTok.size) return null;
   const oSize = parseSize(orig.title);
-  const oPer = oSize && orig.price > 0 ? orig.price / oSize.value : null;
   let best = null, bestScore = Infinity;
   for (const c of candidates || []) {
-    if (!c || c.id === orig.id || !c.name) continue;
+    if (!c || !c.name || c.id === orig.id || exclude.has(c.id)) continue;
     const ct = tokens(c.name);
-    if ([...nameTok].some(w => !ct.has(w))) continue;
-    if (titleTok && titleTok.size) {
-      const covered = [...titleTok].filter(w => ct.has(w)).length / titleTok.size;
-      if (covered < 0.5) continue;
-    }
+    const covered = [...titleTok].filter(w => ct.has(w)).length / titleTok.size;
+    if (covered < 0.5) continue;
     const cSize = parseSize(c.name);
-    if (oSize && cSize && oSize.unit === cSize.unit) {
+    const comparable = oSize && cSize && oSize.unit === cSize.unit;
+    if (comparable) {
       const ratio = cSize.value / oSize.value;
       if (ratio < 0.5 || ratio > 2) continue;
+      if (perBase(c, cSize) > (orig.price / oSize.value) * 1.5) continue;
+    } else if (!(c.price > 0) || c.price > orig.price * 1.5) {
+      continue;
     }
-    const per = perBase(c, cSize);
-    if (oPer != null && cSize && oSize && cSize.unit === oSize.unit && per > oPer * 1.5) continue;
-    if (oPer == null && orig.price > 0 && c.price > orig.price * 1.5) continue;
-    const score = per * (isStoreBrand(c.name) ? 0.9 : 1);
+    const score = perBase(c, cSize) * (isStoreBrand(c.name) ? 0.9 : 1);
     if (score < bestScore) { best = c; bestScore = score; }
   }
   return best;
+}
+
+// Star Market's cart copy can be out of date (e.g. you changed the cart on your
+// phone). Only trust it if the site updated it after this page loaded.
+export function snapshotIsFresh(json, pageStartMs) {
+  let data;
+  try { data = JSON.parse(json); } catch { return false; }
+  if (!data || typeof data.updatedTime !== 'string') return false;
+  const t = Date.parse(data.updatedTime.replace(/^"+|"+$/g, ''));
+  return Number.isFinite(t) && t >= pageStartMs - 1000;
 }
 
 function toB64Url(text) {
@@ -163,7 +191,13 @@ export function decodeCart(text) {
       if (Number(x.price) > 0) item.price = Number(x.price);
       return item;
     });
-  return items.length ? items : null;
+  // Merge repeated product ids so two frames never work on the same product.
+  const merged = new Map();
+  for (const it of items) {
+    const m = merged.get(it.id);
+    if (m) m.qty = Math.min(MAX_QTY, m.qty + it.qty); else merged.set(it.id, it);
+  }
+  return merged.size ? [...merged.values()] : null;
 }
 
 // "2 units of Banana in cart. Click to update" -> 2

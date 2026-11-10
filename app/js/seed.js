@@ -50,6 +50,19 @@ const REGULARS = [
   ['Crushed red pepper', 'Pantry', p('970054745', 1, 'ea', 'Pastene Red Pepper Crushed - 16 OZ', 4.99)],
 ];
 
+// Titles/usual prices for products we know, used to upgrade data saved by
+// older versions of the app (so substitutes can be priced fairly).
+export const KNOWN_PRODUCTS = Object.fromEntries([
+  ...INGREDIENTS.map(r => r[4]),
+  ...REGULARS.map(r => r[2]),
+  p('960479694', 12, 'oz', 'Signature SELECT/FARMS Green Beans - 12 Oz', 3.49),
+  p('960197561', 20, 'slice', 'Signature Select Multigrain Bread - 24 Oz', 2.50),
+  p('128200111', 16, 'oz', 'Signature SELECT Pasta Spaghetti Box - 16 Oz', 1.29),
+].filter(Boolean).map(x => [x.id, { title: x.title, price: x.price }]));
+
+// Usual quantity for regulars saved before regulars had a quantity.
+export const DEFAULT_REGULAR_QTY = { '184060007': 6 };
+
 export function emptyWeek() {
   return Object.fromEntries(DAYS.map(d => [d, null]));
 }

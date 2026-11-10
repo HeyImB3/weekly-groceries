@@ -1,5 +1,5 @@
 // Saving, loading, and backup files.
-import { createInitialState, emptyWeek, emptyChecks, DAYS } from './seed.js';
+import { createInitialState, emptyWeek, emptyChecks, DAYS, KNOWN_PRODUCTS, DEFAULT_REGULAR_QTY } from './seed.js';
 import { parseProductLink, SECTIONS } from './model.js';
 
 export const STORAGE_KEY = 'weekly-groceries-v1';
@@ -19,8 +19,9 @@ function cleanProduct(p) {
   const parsed = parseProductLink(p.url);
   if (!parsed) return null;
   const out = { ...parsed, packSize: isNum(p.packSize) && p.packSize > 0 ? p.packSize : 1, packUnit: isName(p.packUnit) ? p.packUnit : 'ea' };
-  if (isName(p.title)) out.title = p.title.slice(0, 140);
-  if (isNum(p.price) && p.price > 0) out.price = p.price;
+  const known = KNOWN_PRODUCTS[out.id];
+  if (isName(p.title)) out.title = p.title.slice(0, 140); else if (known) out.title = known.title;
+  if (isNum(p.price) && p.price > 0) out.price = p.price; else if (known) out.price = known.price;
   return out;
 }
 
@@ -57,7 +58,7 @@ function normalize(s) {
     .map(x => ({
       id: x.id, name: x.name,
       section: SECTIONS.includes(x.section) ? x.section : 'Other',
-      qty: isNum(x.qty) && x.qty > 0 ? x.qty : 1,
+      qty: isNum(x.qty) && x.qty > 0 ? x.qty : (DEFAULT_REGULAR_QTY[x.product?.id] || 1),
       product: cleanProduct(x.product),
     }));
   const checks = isObj(s.checks) ? s.checks : {};

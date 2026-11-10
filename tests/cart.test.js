@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cartItemsFromList, encodeCart, decodeCart, inCartQty, CART_HASH_KEY, cartLink, findCartCode,
-  readCartSnapshot, parseSize, parseUnitPrice, pickSubstitute, isStoreBrand, searchTermFor } from '../app/cart-core.js';
+  readCartSnapshot, parseSize, parseUnitPrice, pickSubstitute, isStoreBrand, searchTermFor, snapshotIsFresh } from '../app/cart-core.js';
 
 test('items carry product title and usual price through the link', () => {
   const list = { toBuy: [row({ name: 'Green beans', productId: '970026757', packs: 1, productTitle: 'Signature SELECT/FARMS Green Beans - 2 Lb', productPrice: 5.99 })] };
@@ -86,12 +86,52 @@ test('pickSubstitute prefers store brand when unit price is close', () => {
   assert.equal(s.id, 'b');
 });
 
-test('pickSubstitute works with only an ingredient name (no title)', () => {
-  const s = pickSubstitute({ id: 'x', name: 'Silken tofu' }, [
-    cand('a', 'Nasoya Tofu Silken - 16 Oz', 2.39, 2.39),
-    cand('c', 'Chocolate Bar - 3 Oz', 1, 5.3),
-  ]);
+test('pickSubstitute refuses to guess without the product title and usual price', () => {
+  assert.equal(pickSubstitute({ id: 'x', name: 'Bread' }, [cand('a', 'Bread Crumbs - 15 Oz', 2, 2.1, 'oz')]), null);
+  assert.equal(pickSubstitute({ id: 'x', name: 'Bread', title: 'Some Bread - 20 Oz' }, [cand('a', 'Some Bread - 20 Oz', 2, 0.1, 'oz')]), null);
+});
+
+test('pickSubstitute caps price even when the candidate has no size', () => {
+  const orig = { id: 'x', name: 'Spaghetti', title: 'De Cecco Pasta No. 12 Spaghetti Box - 1 Lb', price: 2.5 };
+  assert.equal(pickSubstitute(orig, [cand('g', 'Fancy Spaghetti Pasta Gift Box', 24.99, null)]), null);
+  assert.equal(pickSubstitute(orig, [cand('e', 'Spaghetti Pasta Eggs - 12 CT', 12, null)]), null); // unit mismatch → total price cap
+  assert.equal(pickSubstitute(orig, [cand('b', 'Barilla Spaghetti Pasta - 1 Lb', 2.29, 2.29)]).id, 'b');
+});
+
+test('pickSubstitute skips excluded ids (other list items / already-picked substitutes)', () => {
+  const orig = { id: 'x', name: 'Silken tofu', title: 'O Organics Tofu Silken - 16 Oz', price: 2.49 };
+  const c = [cand('a', 'Nasoya Tofu Silken - 16 Oz', 2.39, 2.39), cand('b', 'House Tofu Silken - 16 Oz', 2.59, 2.59)];
+  assert.equal(pickSubstitute(orig, c, new Set(['a'])).id, 'b');
+});
+
+test('pickSubstitute matches on the product title, not the ingredient nickname', () => {
+  const orig = { id: 'x', name: 'Fajita vegetables (peppers & onions)', title: 'Signature Select Fajita Vegetables Blend 14 Oz - 14 OZ', price: 1.99 };
+  const s = pickSubstitute(orig, [cand('a', 'Birds Eye Fajita Vegetables Blend - 14 Oz', 2.49, 2.85, 'lb'), cand('b', 'Signature Select Broccoli Florets - 12 Oz', 1.5, 2, 'lb')]);
   assert.equal(s.id, 'a');
+  const t = pickSubstitute({ id: 'y', name: 'Tomatoes', title: 'O Organics Tomatoes Roma - 16 Oz', price: 3.99 },
+    [cand('r', 'Roma Tomato Organic - 16 Oz', 3.5, 3.5, 'lb')]);
+  assert.equal(t.id, 'r');
+});
+
+test('parseSize handles multipacks and spelled-out units', () => {
+  assert.deepEqual(parseSize('Water - 24-16.9 Fl. Oz.'), { value: 405.6, unit: 'floz' });
+  assert.deepEqual(parseSize('Grapes - 1 Pound'), { value: 16, unit: 'oz' });
+  assert.deepEqual(parseSize('Nissin Top Ramen - 6-3 Oz'), { value: 18, unit: 'oz' });
+});
+
+test('decodeCart merges repeated product ids', () => {
+  const raw = Buffer.from(JSON.stringify([{ id: '1', qty: 2, name: 'a' }, { id: '1', qty: 1, name: 'a again' }])).toString('base64url');
+  assert.deepEqual(decodeCart(raw), [{ id: '1', qty: 3, name: 'a' }]);
+});
+
+test('snapshotIsFresh: only trust the cart copy if the site updated it after this page loaded', () => {
+  const pageStart = Date.parse('2026-11-10T05:00:00Z');
+  const fresh = JSON.stringify({ updatedTime: JSON.stringify('2026-11-10T05:00:03Z'), cartItems: [] });
+  const stale = JSON.stringify({ updatedTime: JSON.stringify('2026-11-10T04:00:00Z'), cartItems: [] });
+  assert.equal(snapshotIsFresh(fresh, pageStart), true);
+  assert.equal(snapshotIsFresh(stale, pageStart), false);
+  assert.equal(snapshotIsFresh('{bad', pageStart), false);
+  assert.equal(snapshotIsFresh(null, pageStart), false);
 });
 
 const row = (o) => ({ key: 'k', name: 'X', section: 'Other', amount: null, unit: null, packs: 1, unitMismatch: false,

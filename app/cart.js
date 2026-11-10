@@ -3,7 +3,7 @@
 // Add / + buttons inside hidden frames (a few items at a time) and tops each
 // item up to the amount on your list. It never removes anything.
 // Load the shared helpers fresh each time so updates apply right away.
-const { decodeCart, inCartQty, findCartCode, readCartSnapshot, parseSize, parseUnitPrice, pickSubstitute, searchTermFor } =
+const { decodeCart, inCartQty, findCartCode, readCartSnapshot, snapshotIsFresh, parseSize, parseUnitPrice, pickSubstitute, searchTermFor } =
   await import(`./cart-core.js?v=${Date.now()}`);
 
 const WORKERS_MAX = 4;
@@ -79,12 +79,16 @@ async function getItems(ui) {
   return code ? decodeCart(code) : null;
 }
 
-// Star Market's own copy of the cart (kept up to date by the site in this browser).
-function cartSnapshot() {
-  try { return readCartSnapshot(localStorage.getItem('abCart')); } catch { return new Map(); }
-}
-function haveSnapshot() {
-  try { return !!localStorage.getItem('abCart'); } catch { return false; }
+// Star Market's own copy of the cart. Only trusted when the site refreshed it
+// after this page loaded (it can be stale if you changed the cart elsewhere).
+const PAGE_START = Math.round(performance.timeOrigin || Date.now());
+function knownQty(id) {
+  try {
+    const raw = localStorage.getItem('abCart');
+    if (!snapshotIsFresh(raw, PAGE_START)) return null;
+    const snap = readCartSnapshot(raw);
+    return snap.has(id) ? snap.get(id).qty : 0;
+  } catch { return null; }
 }
 
 // Has the page's product search request come back? (Lets us tell "no results"
@@ -96,19 +100,26 @@ function searchDone(frame) {
   } catch { return false; }
 }
 
-// Load a Star Market search page in a hidden frame.
-// Resolves { d, empty } once `ready(d)` holds (empty=false) or the search came
-// back with nothing matching (empty=true); null if Star Market never answered.
-async function openSearch(frame, query, ready) {
+const anyResult = doc => doc.querySelector('[id^="addButton_"], [id^="bubble_qtyInfo_"], [id^="qtyInfo_"]');
+
+// Load a Star Market search page in a hidden frame. Waits for the NEW page
+// (never reads the previous one), then until `ready(d)` holds, or until the
+// search has come back and settled. Resolves { d, empty } or null if Star
+// Market never answered.
+async function openSearch(frame, query, ready = () => false) {
+  const oldDoc = frame.contentDocument;
   frame.src = `/shop/search-results.html?q=${encodeURIComponent(query)}`;
   let doneAt = 0;
   return waitFor(() => {
     const d = frame.contentDocument;
-    if (!d || d.readyState === 'loading' || !/search-results/.test(frame.contentWindow.location.href)) return null;
+    if (!d || d === oldDoc || d.readyState === 'loading') return null;
+    let q = null;
+    try { q = new URL(frame.contentWindow.location.href).searchParams.get('q'); } catch { /* not ready */ }
+    if (q !== query) return null;
     if (ready(d)) return { d, empty: false };
     if (searchDone(frame)) {
       doneAt = doneAt || Date.now();
-      if (Date.now() - doneAt > 1500) return { d, empty: true };
+      if (Date.now() - doneAt > 1500) return { d, empty: !anyResult(d) };
     }
     return null;
   }, 20000);
@@ -130,25 +141,28 @@ async function incButton(d, id) {
   return waitFor(() => d.getElementById(`inc_qtyInfo_${id}`), 5000);
 }
 
-// Bring one product (already on the loaded page `d`) up to `target`.
-// `known` is the quantity Star Market's cart copy says is there (or null).
-async function fillOnPage(d, id, target, known) {
+// Bring one product (already shown on page `d`) up to `want(had)` units.
+// `known` = fresh cart-copy quantity, or null when we don't know.
+async function fillOnPage(d, id, want, known, cancelled) {
   const add = addBtn(d, id);
   if (add && /sign in/i.test(add.getAttribute('aria-label') || '')) return { state: 'signedout' };
-  // Without a cart copy, the page briefly shows "Add" before it knows what's in
-  // the cart; give it a moment so we never double an item.
-  if (known == null && add) await waitFor(() => qtyEl(d, id), 3000);
-  let cur = Math.max(pageQty(d, id), known || 0);
+  // The page briefly shows "Add" before it knows what's in the cart. Unless the
+  // cart copy says it's not there, give it a moment so we never double an item.
+  if (add && known !== 0) await waitFor(() => qtyEl(d, id), 3000);
+  const onPage = qtyEl(d, id) ? pageQty(d, id) : 0;
+  if (!qtyEl(d, id) && known > 0) return { state: 'failed', had: known }; // page and cart disagree: don't guess
+  let cur = onPage;
   const had = cur;
+  const target = want(had);
   if (cur >= target) return { state: 'already', had };
-  if (pageQty(d, id) === 0) {
+  if (cur === 0) {
     const b = addBtn(d, id);
     if (!b) return { state: 'failed', had };
     b.click();
     if (!(await waitFor(() => pageQty(d, id) >= 1, 10000))) return { state: 'failed', had };
     cur = pageQty(d, id);
   }
-  while (cur < target) {
+  while (cur < target && !cancelled()) {
     const inc = await incButton(d, id);
     if (!inc || inc.disabled) break;
     const before = cur;
@@ -156,7 +170,7 @@ async function fillOnPage(d, id, target, known) {
     if (!(await waitFor(() => pageQty(d, id) > before, 10000))) break;
     cur = pageQty(d, id);
   }
-  return { state: cur >= target ? 'added' : 'partial', had, now: cur };
+  return { state: cur >= target ? 'added' : 'partial', had, now: cur, target };
 }
 
 // Read the products shown on a search page, for picking a substitute.
@@ -175,34 +189,31 @@ function candidates(d) {
   }).filter(c => c.name);
 }
 
-const anyResult = doc => doc.querySelector('[id^="addButton_"], [id^="bubble_qtyInfo_"], [id^="qtyInfo_"]');
-
-async function topUp(frame, item) {
-  const snap = cartSnapshot();
-  const known = snap.has(item.id) ? snap.get(item.id).qty : (haveSnapshot() ? 0 : null);
+// ctx: { claimed: Set of product ids in use (list items + chosen substitutes), cancelled() }
+async function topUp(frame, item, ctx) {
+  const known = knownQty(item.id);
   if (known != null && known >= item.qty) return { state: 'already', had: known };
 
   // Searching by product number shows just that product (or nothing if it's gone).
-  const r1 = await openSearch(frame, item.id, doc => shown(doc, item.id) || anyResult(doc));
+  const r1 = await openSearch(frame, item.id, doc => shown(doc, item.id));
   if (!r1) return { state: 'timeout' };
-  if (shown(r1.d, item.id)) return fillOnPage(r1.d, item.id, item.qty, known);
+  if (shown(r1.d, item.id)) return fillOnPage(r1.d, item.id, () => item.qty, known, ctx.cancelled);
+  if (ctx.cancelled()) return { state: 'cancelled' };
 
-  // Not available: look for a fair substitute by name.
-  const r2 = await openSearch(frame, searchTermFor(item), anyResult);
+  // Not available: look for a fair substitute by name (wait for the full results).
+  const r2 = await openSearch(frame, searchTermFor(item));
   if (!r2) return { state: 'timeout' };
   if (r2.empty) return { state: 'notfound' };
-  const d2 = r2.d;
-  await wait(600); // let prices render
-  const sub = pickSubstitute(item, candidates(d2));
+  const sub = pickSubstitute(item, candidates(r2.d), ctx.claimed);
   if (!sub) return { state: 'notfound' };
+  ctx.claimed.add(sub.id); // claim it right away so no other frame touches it
   // Keep about the same amount if the substitute's size differs.
   const oSize = parseSize(item.title), sSize = parseSize(sub.name);
   const qty = oSize && sSize && oSize.unit === sSize.unit
     ? Math.max(1, Math.ceil(item.qty * oSize.value / sSize.value - 0.05))
     : item.qty;
-  const snap2 = cartSnapshot();
-  const subKnown = snap2.has(sub.id) ? snap2.get(sub.id).qty : (haveSnapshot() ? 0 : null);
-  const r = await fillOnPage(d2, sub.id, qty, subKnown);
+  // Add on top of whatever of the substitute is already in the cart.
+  const r = await fillOnPage(r2.d, sub.id, had => had + qty, knownQty(sub.id), ctx.cancelled);
   return { ...r, sub: { ...sub, qty } };
 }
 
@@ -225,7 +236,7 @@ function report(line, it, r) {
   const problem = text => { set(text, RED); line.append(findLink(it)); return 'problem'; };
   if (r.sub) {
     const s = r.sub;
-    if (r.state === 'added' || r.state === 'already') {
+    if (r.state === 'added') {
       set(`↻ ${it.name}: not available, swapped for ${s.name} ($${s.price.toFixed(2)}) ×${s.qty}`, YELLOW);
       return 'swapped';
     }
@@ -234,7 +245,7 @@ function report(line, it, r) {
   if (r.state === 'added') { set(`✓ ${it.name}: ${r.had ? `had ${r.had}, now ` : ''}${r.now}`, GREEN); return 'added'; }
   if (r.state === 'already') { set(`✓ ${it.name}: already ${r.had} in cart`, GREEN); return 'already'; }
   if (r.state === 'partial') {
-    set(`⚠ ${it.name}: only got to ${r.now} of ${it.qty} (store limit?) `, YELLOW);
+    set(`⚠ ${it.name}: stopped at ${r.now} of ${r.target ?? it.qty} (store limit or slow response) `, YELLOW);
     line.append(findLink(it));
     return 'problem';
   }
@@ -248,12 +259,19 @@ export async function run() {
     alert('Open www.starmarket.com (signed in), then click the Fill cart bookmark again.');
     return;
   }
-  if (document.getElementById(PANEL_ID)) return; // already running
+  if (window.__wgCartRunning) return; // a run is already going (even if its panel was closed)
+  window.__wgCartRunning = true;
+  try { await fill(); } finally { window.__wgCartRunning = false; }
+}
+
+async function fill() {
   const ui = panel();
   const items = await getItems(ui);
   if (!items) { ui.status("Couldn't find a cart list. In the app, click “Build my Star Market cart” first."); return; }
 
   const lines = items.map(it => ui.line(`… ${it.name} ×${it.qty}`, '#8e8e93'));
+  // Every product on the list is "claimed" so a substitute never doubles up on one.
+  const ctx = { claimed: new Set(items.map(it => it.id)), cancelled: () => ui.cancelled };
   const counts = { added: 0, already: 0, swapped: 0, problem: 0 };
   let next = 0, finished = 0, signedOut = false, answered = 0, timeouts = 0, siteDown = false;
   const show = () => ui.status(`Adding… ${finished} of ${items.length} done`);
@@ -276,7 +294,8 @@ export async function run() {
       const it = items[i], line = lines[i];
       line.textContent = `⏳ ${it.name} ×${it.qty}`;
       let r;
-      try { r = await topUp(frame, it); } catch { r = { state: 'failed' }; }
+      try { r = await topUp(frame, it, ctx); } catch { r = { state: 'failed' }; }
+      if (ui.cancelled) return;
       if (r.state === 'timeout') timeouts++; else answered++;
       // If Star Market's search isn't answering at all, stop instead of waiting on every item.
       if (timeouts >= 2 && answered === 0) {
@@ -300,6 +319,8 @@ export async function run() {
   const t0 = Date.now();
   await Promise.all(frames.map(worker));
   frames.forEach(f => f.remove());
+  const forget = () => { history.replaceState(null, '', location.pathname + location.search); window.name = ''; };
+  if (ui.cancelled) { forget(); return; }
   if (siteDown) {
     ui.status("Star Market's search isn't responding right now, so nothing was changed. Try again in a few minutes (reload this page first).");
     return;
@@ -309,8 +330,7 @@ export async function run() {
     if (counts.swapped) parts.push(`${counts.swapped} swapped (yellow, check them)`);
     if (counts.problem) parts.push(`${counts.problem} need a look`);
     ui.status(`Done in ${Math.round((Date.now() - t0) / 1000)}s: ${parts.join(', ')}.`);
-    history.replaceState(null, '', location.pathname + location.search);
-    window.name = '';
+    forget();
     const a = document.createElement('a');
     a.href = '/erums/cart';
     a.textContent = 'Open my cart →';

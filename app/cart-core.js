@@ -130,11 +130,16 @@ export function pickSubstitute(orig, candidates, exclude = new Set()) {
   if (!orig || !orig.title || !(orig.price > 0)) return null;
   const titleTok = tokens(stripSize(orig.title));
   if (!titleTok.size) return null;
+  // Key words: the ingredient's own words that also appear in the product title
+  // ("pesto", "coconut cream") must all be present, so pesto never becomes Alfredo.
+  const nameTok = tokens(String(orig.name || '').replace(/\(.*?\)/g, ''));
+  const keyWords = [...nameTok].filter(w => titleTok.has(w));
   const oSize = parseSize(orig.title);
   let best = null, bestScore = Infinity;
   for (const c of candidates || []) {
     if (!c || !c.name || c.id === orig.id || exclude.has(c.id)) continue;
     const ct = tokens(c.name);
+    if (keyWords.some(w => !ct.has(w))) continue;
     const covered = [...titleTok].filter(w => ct.has(w)).length / titleTok.size;
     if (covered < 0.5) continue;
     const cSize = parseSize(c.name);

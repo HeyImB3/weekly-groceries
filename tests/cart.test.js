@@ -113,6 +113,17 @@ test('pickSubstitute matches on the product title, not the ingredient nickname',
   assert.equal(t.id, 'r');
 });
 
+test('pickSubstitute requires the key words of the ingredient (real misses from a live run)', () => {
+  const pesto = { id: 'p', name: 'Pesto', title: 'Signature SELECT Pesto Sauce - 8.3 OZ', price: 3.99 };
+  assert.equal(pickSubstitute(pesto, [cand('a', 'Signature SELECT Alfredo Pasta Sauce - 16 Oz', 2.49, 2.49)]), null);
+  assert.equal(pickSubstitute(pesto, [cand('b', 'Barilla Traditional Basil Pesto Sauce - 6.5 Oz', 3.99, 9.82)]).id, 'b');
+  const cream = { id: 'c', name: 'Coconut cream', title: 'Thai Kitchen Gluten Free Unsweetened Coconut Cream - 13.66 Fl. Oz.', price: 5.99 };
+  assert.equal(pickSubstitute(cream, [cand('m', 'Thai Kitchen Gluten Free Lite Coconut Milk - 13.66 Fl. Oz.', 3.99, null)]), null);
+  // ingredient nickname words not in the title don't count ("Ramen" isn't in the Momofuku title)
+  const ramen = { id: 'r', name: 'Ramen noodles', title: 'Momofuku Sesame Miso Noodles 4 Count - 14.5 Oz', price: 9.99 };
+  assert.equal(pickSubstitute(ramen, [cand('s', 'Momofuku Soy & Scallions Noodles - 14.2 Oz', 8.99, null)]).id, 's');
+});
+
 test('parseSize handles multipacks and spelled-out units', () => {
   assert.deepEqual(parseSize('Water - 24-16.9 Fl. Oz.'), { value: 405.6, unit: 'floz' });
   assert.deepEqual(parseSize('Grapes - 1 Pound'), { value: 16, unit: 'oz' });

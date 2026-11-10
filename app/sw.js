@@ -1,5 +1,5 @@
 // Offline support: cache the app's own files. Bump CACHE when files change.
-const CACHE = 'wg-v7';
+const CACHE = 'wg-v8';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest', 'cart-core.js',
   'js/main.js', 'js/model.js', 'js/seed.js', 'js/list.js', 'js/store.js',

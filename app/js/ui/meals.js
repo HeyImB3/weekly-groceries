@@ -2,7 +2,7 @@
 import { h, openSheet, select, download } from './dom.js';
 import { SECTIONS, UNITS, newId, parseProductLink, searchUrl } from '../model.js';
 import { exportBackup, importBackup } from '../store.js';
-import { DAYS } from '../seed.js';
+import { DAYS, createInitialState } from '../seed.js';
 
 let view = { name: 'list' }; // {name:'list'} | {name:'meal', id} | {name:'ing', id, from}
 
@@ -173,6 +173,9 @@ function renderList(root, ctx) {
     if (confirm('Replace everything in the app with this backup?')) ctx.replaceState(r.state);
   } });
   root.append(
+    h('button', { class: 'btn secondary', onclick: () => {
+      if (confirm('Replace your meals, ingredients and regulars with the starter set linked to your usual Star Market products? This also clears the week.')) ctx.replaceState(createInitialState());
+    } }, 'Load my usual meals & Star Market products'),
     h('button', { class: 'btn secondary', onclick: () => download(`weekly-groceries-backup-${today}.json`, exportBackup(ctx.getState())) }, 'Export backup'),
     h('button', { class: 'btn secondary', onclick: () => file.click() }, 'Import backup'),
     file, importErr);

@@ -8,6 +8,15 @@ test('parseProductLink extracts id and canonical url', () => {
     { id: '970555123', url: 'https://www.starmarket.com/shop/product-details.970555123.html' });
 });
 
+test('parseProductLink accepts the newer /shop/pd/<slug>/<id> links', () => {
+  assert.deepEqual(
+    parseProductLink('https://www.starmarket.com/shop/pd/o-organics-tofu-silken-16-oz/960098954'),
+    { id: '960098954', url: 'https://www.starmarket.com/shop/product-details.960098954.html' });
+  assert.deepEqual(
+    parseProductLink('Check this out https://www.starmarket.com/shop/pd/banana/184060007?x=1'),
+    { id: '184060007', url: 'https://www.starmarket.com/shop/product-details.184060007.html' });
+});
+
 test('parseProductLink rejects other urls', () => {
   assert.equal(parseProductLink('https://example.com/foo'), null);
   assert.equal(parseProductLink('https://example.com/shop/product-details.123.html'), null);

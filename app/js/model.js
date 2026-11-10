@@ -7,13 +7,26 @@ export const SECTIONS = [
 
 export const UNITS = ['ea', 'oz', 'lb', 'cup', 'slice', 'bunch', 'tbsp', 'tsp', 'can', 'jar', 'pack', 'loaf'];
 
-const PRODUCT_RE = /^https?:\/\/(?:www\.)?starmarket\.com\/.*product-details\.(\d+)\.html/i;
+// Star Market product links come in two shapes:
+//   https://www.starmarket.com/shop/product-details.960098954.html
+//   https://www.starmarket.com/shop/pd/o-organics-tofu-silken-16-oz/960098954
+// Shared links may also have extra text around them.
+const PRODUCT_RES = [
+  /https?:\/\/(?:www\.)?starmarket\.com\/\S*?product-details\.(\d+)\.html/i,
+  /https?:\/\/(?:www\.)?starmarket\.com\/shop\/pd\/[^/\s?#]+\/(\d+)(?=[/?#\s]|$)/i,
+];
+
+export function productUrl(id) {
+  return `https://www.starmarket.com/shop/product-details.${id}.html`;
+}
 
 export function parseProductLink(url) {
   if (typeof url !== 'string') return null;
-  const m = url.trim().match(PRODUCT_RE);
-  if (!m) return null;
-  return { id: m[1], url: `https://www.starmarket.com/shop/product-details.${m[1]}.html` };
+  for (const re of PRODUCT_RES) {
+    const m = url.trim().match(re);
+    if (m) return { id: m[1], url: productUrl(m[1]) };
+  }
+  return null;
 }
 
 export function searchUrl(term) {

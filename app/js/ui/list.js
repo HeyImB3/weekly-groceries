@@ -3,6 +3,57 @@ import { h, fmt, openSheet, select } from './dom.js';
 import { buildShoppingList } from '../list.js';
 import { SECTIONS, newId } from '../model.js';
 import { productBlock } from './meals.js';
+import { cartItemsFromList, cartLink } from '../../cart-core.js';
+
+const APP_BASE = new URL('../../', import.meta.url).href; // .../weekly-groceries/
+export const BOOKMARKLET = `javascript:(function(){var s=document.createElement('script');s.type='module';s.src='${APP_BASE}cart.js?v='+Date.now();document.body.appendChild(s);})()`;
+
+function setupSheet() {
+  openSheet('Set up the Fill cart bookmark (once)', close => {
+    const msg = h('div', { class: 'sub', style: 'margin-top:6px' });
+    const code = h('input', { value: BOOKMARKLET, readOnly: true, onclick: e => e.target.select() });
+    return [
+      h('ol', { style: 'padding-left:20px;margin:0 0 10px' },
+        h('li', {}, 'Tap “Copy bookmark code” below.'),
+        h('li', {}, 'In Safari, open any page (e.g. starmarket.com), tap the Share button → Add Bookmark. Name it “Fill cart” and save.'),
+        h('li', {}, 'Tap the Bookmarks (book) icon → Edit → tap “Fill cart”, delete its address, paste the code, tap Done.')),
+      code,
+      h('button', { class: 'btn', onclick: async () => {
+        try { await navigator.clipboard.writeText(BOOKMARKLET); msg.textContent = 'Copied! Now paste it as the bookmark’s address.'; }
+        catch { code.select(); msg.textContent = 'Select the text above and copy it.'; }
+      } }, 'Copy bookmark code'),
+      msg,
+      h('div', { class: 'sub', style: 'margin-top:10px' }, 'Chrome on iPhone works too (edit a bookmark’s URL the same way), but to run it you type “Fill cart” in the address bar and pick the bookmark.'),
+      h('button', { class: 'btn secondary', onclick: close }, 'Done'),
+    ];
+  });
+}
+
+function buildCart(list) {
+  const { items, unlinked, skippedDone } = cartItemsFromList(list);
+  openSheet('Build my Star Market cart', close => {
+    if (!items.length) {
+      return [h('div', {}, 'Nothing to add: no linked, un-ticked items on the list.'), h('button', { class: 'btn secondary', onclick: close }, 'OK')];
+    }
+    const link = cartLink(items);
+    const msg = h('div', { class: 'sub' });
+    return [
+      h('div', {}, `${items.length} products (${items.reduce((n, i) => n + i.qty, 0)} items) ready to add. Items already in your cart are topped up, never doubled.`),
+      unlinked.length ? h('div', { class: 'warn', style: 'margin-top:8px' }, `Not linked, add by hand: ${unlinked.join(', ')}`) : null,
+      skippedDone.length ? h('div', { class: 'sub', style: 'margin-top:6px' }, `Skipping ticked-off: ${skippedDone.join(', ')}`) : null,
+      h('ol', { style: 'padding-left:20px' },
+        h('li', {}, 'Tap “Open Star Market” (signed in, in Safari).'),
+        h('li', {}, 'Tap your “Fill cart” bookmark and wait for the green checks.'),
+        h('li', {}, 'Review the cart and check out for pickup.')),
+      h('a', { class: 'btn', href: link, target: '_blank', rel: 'noopener', onclick: () => {
+        navigator.clipboard?.writeText(link).catch(() => {});
+        msg.textContent = 'If Star Market opened inside this app, tap the Safari/compass icon to open it in Safari so your bookmark is there. (The list is also copied, so the bookmark can paste it.)';
+      } }, 'Open Star Market'),
+      msg,
+      h('button', { class: 'linkbtn', onclick: () => { close(); setupSheet(); } }, 'First time? Set up the Fill cart bookmark'),
+    ];
+  });
+}
 
 function addOneOff(ctx) {
   openSheet('Add extra item', close => {
@@ -45,6 +96,7 @@ export function render(root, ctx) {
   const left = list.toBuy.filter(r => !r.done).length;
   if (list.toBuy.length) {
     root.append(h('div', { class: 'sub' }, `${list.toBuy.length} items · ${linked} linked · ${left} left to add`));
+    root.append(h('button', { class: 'btn', onclick: () => buildCart(list) }, '🛒 Build my Star Market cart'));
   }
 
   if (list.staples.length) {
@@ -94,4 +146,5 @@ export function render(root, ctx) {
   }
 
   root.append(h('button', { class: 'btn secondary', onclick: () => addOneOff(ctx) }, '+ Add extra item'));
+  root.append(h('button', { class: 'linkbtn', style: 'display:block;margin:6px auto', onclick: setupSheet }, 'Set up the Fill cart bookmark'));
 }

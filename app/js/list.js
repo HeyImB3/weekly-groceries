@@ -15,6 +15,7 @@ function makeRow({ key, name, section, product, amount = null, unit = null, pack
     unitMismatch: false,
     link: product ? product.url : searchUrl(name),
     linked: !!product,
+    productId: product ? product.id : null,
     done: !!done,
     source,
   };

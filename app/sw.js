@@ -1,7 +1,7 @@
 // Offline support: cache the app's own files. Bump CACHE when files change.
-const CACHE = 'wg-v2';
+const CACHE = 'wg-v3';
 const FILES = [
-  './', 'index.html', 'styles.css', 'manifest.webmanifest',
+  './', 'index.html', 'styles.css', 'manifest.webmanifest', 'cart-core.js',
   'js/main.js', 'js/model.js', 'js/seed.js', 'js/list.js', 'js/store.js',
   'js/ui/dom.js', 'js/ui/meals.js', 'js/ui/week.js', 'js/ui/list.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

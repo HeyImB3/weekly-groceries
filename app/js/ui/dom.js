@@ -27,7 +27,7 @@ export function openSheet(title, build) {
   const close = () => { root.innerHTML = ''; };
   const sheet = h('div', { class: 'sheet' }, h('h3', {}, title));
   const bg = h('div', { class: 'sheet-bg', onclick: e => { if (e.target === bg) close(); } }, sheet);
-  sheet.append(...[build(close)].flat());
+  sheet.append(...[build(close)].flat().filter(x => x !== null && x !== undefined && x !== false));
   root.innerHTML = '';
   root.append(bg);
   return close;

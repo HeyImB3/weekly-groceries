@@ -152,7 +152,9 @@ export async function run() {
 
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
-  frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1000px;height:1200px;border:0;opacity:0;pointer-events:none';
+  // Keep the frame on-screen (but invisible, behind the panel): iPhone browsers
+  // may not load or update frames that are off-screen.
+  frame.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;border:0;opacity:0.01;pointer-events:none;z-index:2147483646';
   document.body.append(frame);
 
   const results = { added: [], already: [], problems: [] };

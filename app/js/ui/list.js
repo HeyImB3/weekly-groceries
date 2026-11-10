@@ -8,11 +8,27 @@ import { cartItemsFromList, cartLink } from '../../cart-core.js';
 const APP_BASE = new URL('../../', import.meta.url).href; // .../weekly-groceries/
 export const BOOKMARKLET = `javascript:(function(){var s=document.createElement('script');s.type='module';s.src='${APP_BASE}cart.js?v='+Date.now();document.body.appendChild(s);})()`;
 
+const IS_DESKTOP = typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
+
+function desktopSetup() {
+  const drag = h('a', { href: BOOKMARKLET, class: 'btn', style: 'cursor:grab', draggable: 'true',
+    onclick: e => { e.preventDefault(); alert('Drag this button up to your bookmarks bar instead of clicking it.'); } }, '🧺 Fill cart');
+  return h('div', { class: 'card', style: 'padding:12px 14px;margin-bottom:12px' },
+    h('div', { style: 'font-weight:600' }, 'On a computer (easiest)'),
+    h('ol', { style: 'padding-left:20px;margin:6px 0' },
+      h('li', {}, 'Show your bookmarks bar (Chrome: Ctrl+Shift+B).'),
+      h('li', {}, 'Drag the green “Fill cart” button below up onto the bookmarks bar.')),
+    drag,
+    h('div', { class: 'sub' }, 'Then each week: Build my Star Market cart → Open Star Market → click “Fill cart” on the bookmarks bar. Check out on your phone in the Star Market app — it’s the same cart.'));
+}
+
 function setupSheet() {
   openSheet('Set up the Fill cart bookmark (once)', close => {
     const msg = h('div', { class: 'sub', style: 'margin-top:6px' });
     const code = h('input', { value: BOOKMARKLET, readOnly: true, onclick: e => e.target.select() });
     return [
+      IS_DESKTOP ? desktopSetup() : null,
+      h('div', { style: 'font-weight:600;margin-top:6px' }, 'On iPhone (Safari)'),
       h('ol', { style: 'padding-left:20px;margin:0 0 10px' },
         h('li', {}, 'Tap “Copy bookmark code” below.'),
         h('li', {}, 'In Safari, open any page (e.g. starmarket.com), tap the Share button → Add Bookmark. Name it “Fill cart” and save.'),
@@ -23,7 +39,7 @@ function setupSheet() {
         catch { code.select(); msg.textContent = 'Select the text above and copy it.'; }
       } }, 'Copy bookmark code'),
       msg,
-      h('div', { class: 'sub', style: 'margin-top:10px' }, 'Chrome on iPhone works too (edit a bookmark’s URL the same way), but to run it you type “Fill cart” in the address bar and pick the bookmark.'),
+      h('div', { class: 'sub', style: 'margin-top:10px' }, 'Chrome on iPhone is unreliable with this bookmark — use Safari on the phone, or a computer.'),
       h('button', { class: 'btn secondary', onclick: close }, 'Done'),
     ];
   });

@@ -12,6 +12,14 @@ function go(v, ctx) { view = v; window.scrollTo(0, 0); ctx.update(() => {}); }
 
 const byName = (a, b) => a.name.localeCompare(b.name);
 
+// Accepts "1.5" or "1,5"; returns NaN for junk.
+export function parseNum(v) {
+  const t = String(v ?? '').trim().replace(',', '.');
+  if (t === '') return NaN;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 export function render(root, ctx) {
   const s = ctx.getState();
   if (view.name === 'meal' && s.meals[view.id]) return renderMeal(root, ctx, s.meals[view.id]);
@@ -21,10 +29,12 @@ export function render(root, ctx) {
 }
 
 // ---------- shared: Star Market product block ----------
+// onChange(product|null, quiet): quiet=true means "save without redrawing".
 export function productBlock(product, name, unit, onChange) {
   const box = h('div', { class: 'card', style: 'padding:12px 14px' });
   box.append(h('div', { class: 'sub', style: 'margin-bottom:6px' }, 'Star Market product'));
   if (product) {
+    let cur = { ...product };
     box.append(
       h('div', { class: 'inline', style: 'justify-content:space-between' },
         h('span', {}, `Linked · #${product.id}`),
@@ -32,8 +42,8 @@ export function productBlock(product, name, unit, onChange) {
       h('div', { class: 'inline', style: 'margin-top:10px' },
         h('span', { class: 'sub', style: 'flex:none' }, 'One package ='),
         h('input', { type: 'number', inputMode: 'decimal', min: '0', step: 'any', value: product.packSize, class: 'amt',
-          onchange: e => onChange({ ...product, packSize: Number(e.target.value) || 1 }) }),
-        select(UNITS, product.packUnit, v => onChange({ ...product, packUnit: v }))),
+          onchange: e => { const n = parseNum(e.target.value); if (n > 0) { cur = { ...cur, packSize: n }; onChange(cur, true); } } }),
+        select(UNITS, product.packUnit, v => { cur = { ...cur, packUnit: v }; onChange(cur, false); })),
       h('div', { class: 'sub', style: 'margin-top:6px' }, `e.g. a dozen eggs = 12 ea. Use the same unit as the recipe (${unit || 'ea'}) so the app can count packages.`),
       h('button', { class: 'linkbtn', style: 'color:var(--danger);margin-top:6px', onclick: () => onChange(null) }, 'Remove link'));
   } else {
@@ -151,7 +161,7 @@ function renderList(root, ctx) {
 
   // Backup
   root.append(h('h2', {}, 'Backup'),
-    h('div', { class: 'sub', style: 'margin:-4px 0 8px' }, 'Your meals live on this phone. Export a backup now and then (save it to Files or iCloud).'));
+    h('div', { class: 'sub', style: 'margin:-4px 0 8px' }, 'Your meals live on this phone, inside this app only (Safari, Chrome and the home-screen icon each keep their own copy). Export a backup now and then and save it to Files or iCloud. To move your meals, export here and import there.'));
   const today = new Date().toISOString().slice(0, 10);
   const importErr = h('div', { class: 'err' });
   const file = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none', onchange: async e => {
@@ -172,17 +182,18 @@ function editRegular(ctx, id) {
   const close = openSheet('Regular item', () => {
     const r = ctx.getState().regulars.find(x => x.id === id);
     if (!r) return [];
+    const quiet = patch => ctx.save(st => { Object.assign(st.regulars.find(x => x.id === id), patch); });
     const set = patch => { ctx.update(st => { Object.assign(st.regulars.find(x => x.id === id), patch); }); close(); editRegular(ctx, id); };
     return [
-      h('label', { class: 'field' }, h('span', {}, 'Name'), h('input', { value: r.name, onchange: e => e.target.value.trim() && set({ name: e.target.value.trim() }) })),
-      h('label', { class: 'field' }, h('span', {}, 'Store section'), select(SECTIONS, r.section, v => set({ section: v }))),
-      productBlock(r.product, r.name, r.product?.packUnit || 'pack', p => set({ product: p })),
+      h('label', { class: 'field' }, h('span', {}, 'Name'), h('input', { value: r.name, onchange: e => e.target.value.trim() && quiet({ name: e.target.value.trim() }) })),
+      h('label', { class: 'field' }, h('span', {}, 'Store section'), select(SECTIONS, r.section, v => quiet({ section: v }))),
+      productBlock(r.product, r.name, r.product?.packUnit || 'pack', (p, q) => (q ? quiet({ product: p }) : set({ product: p }))),
       h('button', { class: 'btn danger', onclick: () => {
         if (!confirm(`Delete “${r.name}”?`)) return;
         ctx.update(st => { st.regulars = st.regulars.filter(x => x.id !== id); delete st.checks.regularsIncluded[id]; });
         close();
       } }, 'Delete regular'),
-      h('button', { class: 'btn secondary', onclick: () => close() }, 'Done'),
+      h('button', { class: 'btn secondary', onclick: () => { close(); ctx.update(() => {}); } }, 'Done'),
     ];
   });
 }
@@ -193,7 +204,7 @@ function renderMeal(root, ctx, meal) {
   root.append(
     h('button', { class: 'back', onclick: () => go({ name: 'list' }, ctx) }, '‹ My Meals'),
     h('label', { class: 'field' }, h('span', {}, 'Meal name'),
-      h('input', { value: meal.name, onchange: e => { const v = e.target.value.trim(); if (v) ctx.update(st => { st.meals[meal.id].name = v; }); } })),
+      h('input', { value: meal.name, onchange: e => { const v = e.target.value.trim(); if (v) ctx.save(st => { st.meals[meal.id].name = v; }); } })),
     h('h2', {}, 'Ingredients (for 2 servings)'));
 
   meal.items.forEach((item, idx) => {
@@ -204,7 +215,11 @@ function renderMeal(root, ctx, meal) {
         h('div', {}, ing.name),
         h('div', { class: 'sub' }, `${ing.staple ? 'staple · ' : ''}${ing.product ? 'linked' : 'not linked'} ›`)),
       h('input', { type: 'number', inputMode: 'decimal', min: '0', step: 'any', class: 'amt', value: item.amount,
-        onchange: e => ctx.update(st => { st.meals[meal.id].items[idx].amount = Number(e.target.value) || 0; }) }),
+        onchange: e => {
+          const n = parseNum(e.target.value);
+          if (!(n >= 0)) { e.target.value = item.amount; return; }
+          ctx.save(st => { const it = st.meals[meal.id].items.find(x => x.ingredientId === item.ingredientId); if (it) it.amount = n; });
+        } }),
       h('span', { class: 'sub', style: 'width:38px;flex:none' }, ing.unit),
       h('button', { 'aria-label': 'Remove', style: 'color:var(--danger);padding:4px 6px;flex:none', onclick: () =>
         ctx.update(st => { st.meals[meal.id].items.splice(idx, 1); }) }, '✕')));
@@ -239,7 +254,7 @@ function renderIngredient(root, ctx, ing) {
 
   root.append(back,
     h('label', { class: 'field' }, h('span', {}, 'Ingredient'),
-      h('input', { value: ing.name, onchange: e => { const v = e.target.value.trim(); if (v) set({ name: v }); } })),
+      h('input', { value: ing.name, onchange: e => { const v = e.target.value.trim(); if (v) ctx.save(st => { st.ingredients[ing.id].name = v; }); } })),
     h('div', { class: 'sub' }, usedIn.length ? `Used in ${usedIn.length} meal${usedIn.length > 1 ? 's' : ''}: ${usedIn.map(m => m.name).join(', ')}` : 'Not used in any meal'),
     h('div', { class: 'inline', style: 'margin-top:10px' },
       h('label', { class: 'field', style: 'flex:1;margin:0' }, h('span', {}, 'Recipe unit'), select(UNITS, ing.unit, v => set({ unit: v }))),
@@ -247,7 +262,8 @@ function renderIngredient(root, ctx, ing) {
     h('label', { class: 'check', style: 'margin:10px 0' },
       h('input', { type: 'checkbox', checked: ing.staple, onchange: e => set({ staple: e.target.checked }) }),
       h('span', {}, 'Staple (usually have it — ask before buying)')),
-    productBlock(ing.product, ing.name, ing.unit, p => set({ product: p })),
+    productBlock(ing.product, ing.name, ing.unit, (p, quiet) =>
+      quiet ? ctx.save(st => { st.ingredients[ing.id].product = p; }) : set({ product: p })),
     h('button', { class: 'btn danger', onclick: () => {
       if (!confirm(usedIn.length ? `Delete “${ing.name}”? It will be removed from ${usedIn.length} meal(s).` : `Delete “${ing.name}”?`)) return;
       ctx.update(st => {

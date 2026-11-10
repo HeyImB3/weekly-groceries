@@ -30,13 +30,36 @@ export function showTab(name) {
   render();
 }
 
-const ctx = { getState, update, replaceState, showTab };
+// Save a change without redrawing the screen (used while typing, so the
+// keyboard and focus stay put on iPhone).
+export function save(mutator) {
+  mutator(state);
+  saveState(localStorage, state);
+}
+
+const ctx = { getState, update, save, replaceState, showTab };
 
 function render() {
   const root = document.getElementById('screen');
   const y = window.scrollY;
   root.innerHTML = '';
-  screens[current].render(root, ctx);
+  try {
+    screens[current].render(root, ctx);
+  } catch (err) {
+    console.error(err);
+    root.innerHTML = '';
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = 'Something went wrong showing this screen. Your data is still saved.';
+    const fix = document.createElement('button');
+    fix.className = 'btn secondary';
+    fix.textContent = 'Clean up saved data and retry';
+    fix.addEventListener('click', () => {
+      try { localStorage.setItem('weekly-groceries-v1-rescue', JSON.stringify(state)); } catch {}
+      replaceState(loadState({ getItem: () => JSON.stringify(state) }));
+    });
+    root.append(p, fix);
+  }
   for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === current);
   window.scrollTo(0, y);
 }

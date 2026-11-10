@@ -36,7 +36,7 @@ export function render(root, ctx) {
   const list = buildShoppingList(s);
   root.append(h('h1', {}, 'Shopping List'));
 
-  if (list.empty && !list.staples.length && !list.regulars.length) {
+  if (list.noMeals) {
     root.append(h('div', { class: 'empty' }, 'Pick some meals on the Week tab.'),
       h('button', { class: 'btn', onclick: () => ctx.showTab('week') }, 'Go to This Week'));
   }

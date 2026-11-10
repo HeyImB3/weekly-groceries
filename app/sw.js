@@ -1,5 +1,5 @@
 // Offline support: cache the app's own files. Bump CACHE when files change.
-const CACHE = 'wg-v1';
+const CACHE = 'wg-v2';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/main.js', 'js/model.js', 'js/seed.js', 'js/list.js', 'js/store.js',
@@ -23,6 +23,9 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
     fetch(e.request)
-      .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; })
+      .then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; }
+        return caches.match(e.request, { ignoreSearch: true }).then(r => r || res);
+      })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
 });

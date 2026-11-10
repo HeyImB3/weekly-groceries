@@ -1,5 +1,6 @@
 // Saving, loading, and backup files.
-import { createInitialState, emptyWeek, emptyChecks } from './seed.js';
+import { createInitialState, emptyWeek, emptyChecks, DAYS } from './seed.js';
+import { parseProductLink, SECTIONS } from './model.js';
 
 export const STORAGE_KEY = 'weekly-groceries-v1';
 
@@ -9,14 +10,64 @@ function validState(s) {
   return isObj(s) && s.version === 1 && isObj(s.ingredients) && isObj(s.meals) && isObj(s.week);
 }
 
-// Fill in any missing optional parts so older/partial data still works.
+const isName = v => typeof v === 'string' && v.trim() !== '';
+const isNum = v => typeof v === 'number' && Number.isFinite(v);
+
+// Only keep product links that are real Star Market product pages.
+function cleanProduct(p) {
+  if (!isObj(p)) return null;
+  const parsed = parseProductLink(p.url);
+  if (!parsed) return null;
+  return { ...parsed, packSize: isNum(p.packSize) && p.packSize > 0 ? p.packSize : 1, packUnit: isName(p.packUnit) ? p.packUnit : 'ea' };
+}
+
+// Drop damaged entries and fill in missing parts so the app can never be
+// locked up by bad saved data.
 function normalize(s) {
+  const ingredients = {};
+  for (const [id, i] of Object.entries(s.ingredients)) {
+    if (!isObj(i) || !isName(i.name)) continue;
+    ingredients[id] = {
+      id, name: i.name,
+      unit: isName(i.unit) ? i.unit : 'ea',
+      section: SECTIONS.includes(i.section) ? i.section : 'Other',
+      staple: !!i.staple,
+      product: cleanProduct(i.product),
+    };
+  }
+  const meals = {};
+  for (const [id, m] of Object.entries(s.meals)) {
+    if (!isObj(m) || !isName(m.name) || !Array.isArray(m.items)) continue;
+    meals[id] = {
+      id, name: m.name,
+      items: m.items.filter(it => isObj(it) && typeof it.ingredientId === 'string' && isNum(it.amount))
+        .map(it => ({ ingredientId: it.ingredientId, amount: it.amount })),
+    };
+  }
+  const week = emptyWeek();
+  for (const d of DAYS) {
+    const p = s.week[d];
+    if (isObj(p) && typeof p.mealId === 'string') week[d] = { mealId: p.mealId, servings: isNum(p.servings) && p.servings > 0 ? p.servings : 2 };
+  }
+  const extra = (list, withQty) => (Array.isArray(list) ? list : [])
+    .filter(x => isObj(x) && isName(x.name) && typeof x.id === 'string')
+    .map(x => ({
+      id: x.id, name: x.name,
+      section: SECTIONS.includes(x.section) ? x.section : 'Other',
+      ...(withQty ? { qty: isNum(x.qty) && x.qty > 0 ? x.qty : 1 } : {}),
+      product: cleanProduct(x.product),
+    }));
+  const checks = isObj(s.checks) ? s.checks : {};
+  const flags = v => (isObj(v) ? Object.fromEntries(Object.entries(v).filter(([, b]) => b === true)) : {});
   return {
-    ...s,
-    householdStaples: Array.isArray(s.householdStaples) ? s.householdStaples : [],
-    regulars: Array.isArray(s.regulars) ? s.regulars : [],
-    oneOffs: Array.isArray(s.oneOffs) ? s.oneOffs : [],
-    checks: { ...emptyChecks(), ...(isObj(s.checks) ? s.checks : {}) },
+    version: 1,
+    ingredients,
+    meals,
+    week,
+    householdStaples: (Array.isArray(s.householdStaples) ? s.householdStaples : []).filter(id => typeof id === 'string'),
+    regulars: extra(s.regulars, false),
+    oneOffs: extra(s.oneOffs, true),
+    checks: { staplesNeeded: flags(checks.staplesNeeded), regularsIncluded: flags(checks.regularsIncluded), done: flags(checks.done) },
   };
 }
 

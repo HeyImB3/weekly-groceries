@@ -93,5 +93,5 @@ export function buildShoppingList(state) {
   toBuy.sort((a, b) => sectionIndex(a.section) - sectionIndex(b.section) || a.name.localeCompare(b.name));
 
   const empty = !anyMeal && toBuy.length === 0;
-  return { empty, staples, regulars, toBuy };
+  return { empty, noMeals: !anyMeal, staples, regulars, toBuy };
 }

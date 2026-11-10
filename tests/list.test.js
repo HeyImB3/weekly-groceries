@@ -132,6 +132,15 @@ test('empty week', () => {
   assert.deepEqual(l.toBuy, []);
 });
 
+test('noMeals is true when no day has a meal, even with regulars', () => {
+  const s = base();
+  s.regulars = [{ id: 'r1', name: 'Coffee', section: 'Pantry', product: null }];
+  s.householdStaples = ['soy'];
+  assert.equal(buildShoppingList(s).noMeals, true);
+  s.week.mon = { mealId: 'omelette', servings: 2 };
+  assert.equal(buildShoppingList(s).noMeals, false);
+});
+
 test('dangling references are skipped', () => {
   const s = base();
   s.week.mon = { mealId: 'gone', servings: 2 };

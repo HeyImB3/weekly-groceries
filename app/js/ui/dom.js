@@ -38,9 +38,16 @@ export function select(options, value, onchange) {
     options.map(o => h('option', { value: o, selected: o === value }, o)));
 }
 
-export function download(filename, text) {
+// Save a file. On iPhone, the share sheet (Save to Files) is the reliable way,
+// including from the home-screen app; fall back to a normal download.
+export async function download(filename, text) {
+  const file = typeof File === 'function' ? new File([text], filename, { type: 'application/json' }) : null;
+  if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: filename }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
   const a = h('a', { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: filename });
   document.body.append(a);
   a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 60000);
 }

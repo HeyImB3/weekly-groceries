@@ -45,6 +45,38 @@ test('bad backups rejected with message', () => {
   }
 });
 
+test('damaged entries in a backup are dropped, not crash-causing', () => {
+  const s = createInitialState();
+  const ingId = Object.keys(s.ingredients)[0];
+  s.meals.bad = { name: 'X' };                       // no items
+  s.meals.noname = { id: 'noname', items: [] };      // no name
+  s.meals.badItems = { id: 'badItems', name: 'Y', items: [null, { ingredientId: ingId, amount: 'x' }, { ingredientId: ingId, amount: 2 }] };
+  s.ingredients.broken = { id: 'broken' };           // no name
+  s.ingredients[ingId].product = { id: '1', url: 'javascript:alert(1)', packSize: 1, packUnit: 'ea' };
+  s.week.mon = 'nonsense';
+  s.regulars = [{ id: 'r', name: 'Coffee', section: 'Pantry', product: { url: 'javascript:alert(1)' } }, null];
+  s.oneOffs = [{ nope: 1 }];
+  const r = importBackup(exportBackup(s));
+  assert.equal(r.ok, true);
+  assert.equal(r.state.meals.bad, undefined);
+  assert.equal(r.state.meals.noname, undefined);
+  assert.deepEqual(r.state.meals.badItems.items, [{ ingredientId: ingId, amount: 2 }]);
+  assert.equal(r.state.ingredients.broken, undefined);
+  assert.equal(r.state.ingredients[ingId].product, null);
+  assert.equal(r.state.week.mon, null);
+  assert.equal(r.state.regulars.length, 1);
+  assert.equal(r.state.regulars[0].product, null);
+  assert.deepEqual(r.state.oneOffs, []);
+});
+
+test('valid product links survive normalize', () => {
+  const s = createInitialState();
+  const ingId = Object.keys(s.ingredients)[0];
+  s.ingredients[ingId].product = { id: '5', url: 'https://www.starmarket.com/shop/product-details.5.html', packSize: 12, packUnit: 'ea' };
+  const r = importBackup(exportBackup(s));
+  assert.deepEqual(r.state.ingredients[ingId].product, s.ingredients[ingId].product);
+});
+
 test('resetWeek clears week and checks, keeps meals', () => {
   const s = createInitialState();
   s.week.mon = { mealId: Object.keys(s.meals)[0], servings: 2 };

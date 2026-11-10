@@ -37,7 +37,7 @@ test('all references and sections valid; non-staples are linked', () => {
 test('regulars from the Nov 9 order are saved, unticked', () => {
   const s = createInitialState();
   const names = s.regulars.map(r => r.name);
-  for (const n of ['Bananas', 'Green beans', 'Extra firm tofu']) assert.ok(names.includes(n), n);
+  assert.deepEqual(names.sort(), ['Bananas', 'Crushed red pepper', 'Extra firm tofu (snacks)']);
   assert.deepEqual(s.checks.regularsIncluded, {});
 });
 
@@ -49,11 +49,20 @@ test("owner's Nov 9 week reproduces the order's package counts", () => {
   const l = buildShoppingList(s);
   const packs = Object.fromEntries(l.toBuy.map(r => [r.name, r.packs]));
   assert.deepEqual(packs, {
-    'Butternut squash': 1, 'Fajita vegetables (peppers & onions)': 2, 'Green onions': 1, 'Potatoes': 1,
+    'Butternut squash': 1, 'Extra firm tofu': 4, 'Green beans': 1, 'Green onions': 1, 'Potatoes': 1,
     'Silken tofu': 2, 'Eggs': 2, 'Shredded cheddar': 2, 'Bread': 1,
-    'Pesto': 2, 'Ramen noodles': 1, 'Rice vermicelli noodles': 2, 'Spaghetti': 2,
+    'Fajita vegetables (peppers & onions)': 2, 'Coconut cream': 1, 'Pesto': 2, 'Ramen noodles': 1, 'Rice vermicelli noodles': 2, 'Spaghetti': 2,
   });
   assert.ok(l.toBuy.every(r => r.linked && !r.unitMismatch));
+  // bouillon is a staple used by ramen and the squash soup
+  assert.ok(l.staples.some(s => s.name === 'Vegetable bouillon'));
+});
+
+test('owner kept De Cecco spaghetti and Dave\'s bread', () => {
+  const s = createInitialState();
+  const by = n => Object.values(s.ingredients).find(i => i.name === n).product.id;
+  assert.equal(by('Spaghetti'), '128250110');
+  assert.equal(by('Bread'), '960038380');
 });
 
 test('week has 7 empty days', () => {

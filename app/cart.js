@@ -2,7 +2,8 @@
 // "Fill cart" bookmark) while you're signed in. It uses Star Market's own
 // Add / + buttons inside a hidden frame, one product at a time, and tops each
 // item up to the amount on your list (it never removes anything).
-import { CART_HASH_KEY, decodeCart, inCartQty } from './cart-core.js';
+// Load the shared helpers fresh each time so updates apply right away.
+const { CART_HASH_KEY, decodeCart, inCartQty } = await import(`./cart-core.js?v=${Date.now()}`);
 
 const PANEL_ID = 'wg-cart-panel';
 const wait = ms => new Promise(r => setTimeout(r, ms));

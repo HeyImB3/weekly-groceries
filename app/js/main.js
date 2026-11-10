@@ -49,3 +49,7 @@ for (const b of document.querySelectorAll('#tabs button')) {
 }
 
 render();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}

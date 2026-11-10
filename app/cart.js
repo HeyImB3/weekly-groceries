@@ -79,14 +79,22 @@ async function getItems(ui) {
 // Load Star Market's search page for one product in the hidden frame.
 async function openProduct(frame, id) {
   frame.src = `/shop/search-results.html?q=${id}&wg=${Date.now()}`;
-  return waitFor(() => {
+  const find = () => {
     const d = frame.contentDocument;
     if (!d || d.readyState === 'loading') return null;
     const add = d.getElementById(`addButton_${id}`);
     const qty = d.getElementById(`qtyInfo_${id}`) || d.getElementById(`bubble_qtyInfo_${id}`);
     if (add || qty) return { d, add, qty };
     return null;
-  }, 20000);
+  };
+  const first = await waitFor(find, 20000);
+  if (!first) return null;
+  // The page shows "Add" for a moment before it knows what's already in the
+  // cart. Wait for it to settle so we never double an item.
+  if (first.add) {
+    await waitFor(() => first.d.getElementById(`bubble_qtyInfo_${id}`) || first.d.getElementById(`qtyInfo_${id}`), 3000);
+  }
+  return find();
 }
 
 // Items already in the cart show a collapsed "bubble"; the stepper shows qtyInfo.
@@ -112,7 +120,9 @@ async function topUp(frame, item) {
   const had = cur;
   if (cur >= item.qty) return { state: 'already', had };
   if (cur === 0) {
-    d.getElementById(`addButton_${item.id}`)?.click();
+    const add = d.getElementById(`addButton_${item.id}`);
+    if (!add) return { state: 'failed', had };
+    add.click();
     const ok = await waitFor(() => currentQty(d, item.id) >= 1, 10000);
     if (!ok) return { state: 'failed', had };
     cur = currentQty(d, item.id);
